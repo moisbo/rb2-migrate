@@ -5,7 +5,7 @@ import { Handler, HandlerBase } from './handlers';
 
 export class FundingBody extends HandlerBase implements Handler {
 
-  crosswalk(o:Object): Object|undefined {
+  crosswalk(o:Object, mainObj?:any): Object|undefined {
 
     return {
     	'dc_title': o['dc_title'],

@@ -26,7 +26,7 @@ export interface Redbox {
   setProgress(pf: (message: string) => void): void;
 
   info(): Promise<Object>;
-  list(oid: string, start?:number ): Promise<string[]>;
+  list(oid: string, start?:number, limit?:number ): Promise<string[]>;
   createRecord(metadata: Object, packagetype: string, options?: Object): Promise<string|undefined>;
   // deleteRecord(oid: string): Promise<bool>;
   getRecord(oid: string): Promise<Object|undefined>;
@@ -35,6 +35,8 @@ export interface Redbox {
   getPermissions(oid: string): Promise<Object|undefined>;
   grantPermission(oid: string, permission: string, users:Object): Promise<Object|undefined>;
   removePermission(oid: string, permission: string, users:Object): Promise<Object|undefined>;
+  getConfigValue(key: string): string;
+  getNumRecords(ptype?: string): Promise<number>;
 }
 
 
@@ -45,11 +47,11 @@ export abstract class BaseRedbox {
   baseURL: string;
   apiKey: string;
   version: string;
-  
+
   ai: AxiosInstance;
   progress: ((message: string) => void)|undefined;
-  
-  
+
+
   constructor(cf: Object) {
     this.baseURL = cf['baseURL'];
     this.apiKey = cf['apiKey'];
@@ -58,9 +60,9 @@ export abstract class BaseRedbox {
 
   /* this is separate so Redbox2 can hack baseURL */
 
-  /* using a custom serialiser because axios' default 
+  /* using a custom serialiser because axios' default
      URL-encodes the solr query string for search */
-  
+
   initApiClient() {
     this.ai = axios.create({
       baseURL: this.baseURL,
@@ -73,21 +75,21 @@ export abstract class BaseRedbox {
       }
     });
   }
-  
+
   // set a progress hook which will get called with messages
   // by "long" operations like list - this is used for the
   // cli-spinner in migrate.ts
-  
+
   setProgress(pf: (message: string) => void): void {
     this.progress = pf;
   }
-  
+
   removeprogress():void {
     this.progress = undefined;
   }
-  
+
   /* low-level method which is used by all the GET requests */
-  
+
   async apiget(path: string, params?: Object): Promise<Object|undefined> {
     let url = path;
     if( url[0] !== '/' ) {
@@ -106,9 +108,9 @@ export abstract class BaseRedbox {
       return undefined;
     }
   }
-  
+
   /* low-level method used by POST requests */
-  
+
   async apipost(path: string, payload: Object, params?: Object): Promise<Object|undefined> {
     let url = path;
     let config = {};
@@ -162,7 +164,12 @@ export abstract class BaseRedbox {
 
   }
 
+  getConfigValue(key:string) {
+    switch(key) {
+      case 'baseUrl':
+        return this.baseURL;
+        // TODO: return other configuration items for this RB server... 
+    }
+    return undefined;
+  }
 }
-
-
-

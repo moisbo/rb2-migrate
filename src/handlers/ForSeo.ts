@@ -1,12 +1,33 @@
 
 import { Handler, HandlerBase } from './handlers';
+import * as _ from 'lodash';
 
 const FOR_SEO_RE = /http:\/\/purl.org\/asc\/1297.0\/2008\/(seo|for)\/(\d+)$/;
 const FOR_SEO_DELIM = ' - ';
 
 export class ForSeo extends HandlerBase implements Handler {
 
-  crosswalk(o:Object): Object|undefined {
+  crosswalk(o:Object, mainObj?:any): Object|undefined {
+    if (this.config['useSubFields'] && mainObj) {
+      let output = [];
+      _.forOwn(o, (label, idx) => {
+        const curObj = {label: label};
+        _.forOwn(this.config['subFields'], (dest, src) => {
+          if (dest == 'notation' && isNaN(_.get(mainObj, `${src}[${idx}]`))) {
+            return;
+          }
+          _.set(curObj, dest, _.get(mainObj, `${src}[${idx}]`));
+        });
+        curObj['name'] = `${curObj['notation']} - ${curObj['label']}`;
+        const genealogy = this.genealogy(curObj['notation']);
+        if (!_.isEmpty(genealogy)) {
+          curObj['genealogy'] = genealogy;
+        }
+        output.push(curObj);
+      });
+      output = _.sortBy(output, (o) => { return _.toInteger(o.notation) });
+      return output;
+    }
     const url = o['rdf:resource']; 
     const name = o['skos:prefLabel'];
     if( !url ) {

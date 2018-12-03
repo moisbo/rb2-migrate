@@ -17,7 +17,7 @@ const util = require('util');
 
 export class Person extends HandlerBase implements Handler {
 
-  crosswalk(o: Object): Object|undefined {
+  crosswalk(o: Object, mainObj?:any): Object|undefined {
     const fullname = util.format("%s %s", o["givenname"].trim(), o["familyname"].trim());
     var honorific = o["honorific"].trim();
     if( honorific ) {

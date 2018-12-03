@@ -13,24 +13,67 @@ export class Redbox2 extends BaseRedbox implements Redbox {
 
   branding: string;
   portal: string;
+  csrfToken: string;
+  cf: any;
 
   // Note: not using http://host/branding/portal/api as the base URL because
   // the endpoint I'm using to search is not on the api
 
   constructor(cf: Object) {
     super(cf);
+    this.cf = cf;
     this.version = 'Redbox2';
     this.branding = cf['branding'];
     this.portal = cf['portal'];
     this.baseURL += '/' + this.branding + '/' + this.portal;
     this.initApiClient();
-  }  
+  }
 
-  
+
   async info(): Promise<Object> {
     return {};
   }
 
+  // async apipost(path: string, payload: Object, params?: Object): Promise<Object|undefined> {
+  //   let url = path;
+  //   let config = {};
+  //   if( url[0] !== '/' ) {
+  //     url = '/' + url;
+  //   }
+  //   try {
+  //     if( params ) {
+  //       config["params"] = params;
+  //     }
+  //     config['headers'] = {
+  //       "Authorization": "Bearer " + this.apiKey,
+	//       "Content-Type": "application/json",
+  //       "X-CSRF-Token": this.csrfToken
+  //     };
+  //     let response = await this.ai.post(url, payload, config);
+  //     if( response.status >= 200 && response.status < 300 ) {
+  //       return response.data;
+  //     }
+  //   } catch ( e ) {
+  //     console.trace("\n\nPost error " + String(e));
+  //     console.log("URL: " + url);
+  //     console.log("payload: " + JSON.stringify(payload).slice(0, 40));
+  //     console.log("config:" + JSON.stringify(config));
+  //     return undefined;
+  //   }
+  // }
+
+  async getNumRecords(ptype?: string): Promise<number> {
+    try {
+      let params = { recordType: ptype, rows: 1 };
+      let resp = await this.apiget('listRecords', params);
+      let response = resp["response"];
+      let numFound = response["numFound"];
+      return numFound;
+    } catch(e) {
+      console.log("Error " + e);
+      return -1;
+    }
+  }
   
   async list(ptype: string, start?:number): Promise<string[]> {
     console.log("About to list");
@@ -39,7 +82,7 @@ export class Redbox2 extends BaseRedbox implements Redbox {
     }
 
     const pagen = 10;
-    
+
     try {
       if( this.progress ) {
 	this.progress(util.format("Searching for %s: %d", ptype, start));
@@ -65,16 +108,16 @@ export class Redbox2 extends BaseRedbox implements Redbox {
 
 
   /* createRecord - add an object via the api.
-     
+
      @metadata -> object containing the metadata
      @packagetype -> has to match one of the values supported
      by this redbox instance
      @options -> object with the following options
      oid -> to specify the oid
      skipReindex -> skip the reindex process
-     
+
   **/
-  
+
   async createRecord(metadata: Object, packagetype: string, options?: Object): Promise<string|undefined> {
     let url = 'api/records/metadata/' + packagetype;
     let params: Object = {};
@@ -102,7 +145,7 @@ export class Redbox2 extends BaseRedbox implements Redbox {
 
   /* Returns the record, or undefined if it's not
      found */
-  
+
   async getRecord(oid: string): Promise<Object|undefined> {
     try {
       let response = await this.apiget('api/records/metadata/' + oid);
@@ -112,11 +155,11 @@ export class Redbox2 extends BaseRedbox implements Redbox {
       return undefined;
     }
   }
-  
+
   /* The record's metadata is metadata about the record, not the
      metadata stored in the record (that's what getRecord returns)
      */
-  
+
   async getRecordMetadata(oid: string): Promise<Object|undefined> {
     try {
       let response = await this.apiget('api/objectmetadata/' + oid);
@@ -126,9 +169,9 @@ export class Redbox2 extends BaseRedbox implements Redbox {
       return undefined;
     }
   }
-  
-  
-  /* this method looks like it's using the wrong url? */ 
+
+
+  /* this method looks like it's using the wrong url? */
 
   async updateRecordMetadata(oid: string, md: Object): Promise<Object|undefined> {
     try {
@@ -156,10 +199,10 @@ export class Redbox2 extends BaseRedbox implements Redbox {
 
      {
         "users": [ "Mike.Lynch@domain.edu.au" ],
-        "pendingUsers": [ "Joe.Hill@domain.edu.au" ]  
+        "pendingUsers": [ "Joe.Hill@domain.edu.au" ]
      }
 
-     The API backend merges (or subtracts) these lists from the 
+     The API backend merges (or subtracts) these lists from the
      current values.
 
      On success, both of these return a permissions object (the same
@@ -183,7 +226,7 @@ export class Redbox2 extends BaseRedbox implements Redbox {
   }
 
   /* Revoke the permission (view or edit) from the users specified in the
-     object 
+     object
   */
 
 
@@ -225,7 +268,7 @@ export class Redbox2 extends BaseRedbox implements Redbox {
       return undefined;
     }
   }
-  
+
   async readDatastream(oid: string, dsid: string): Promise<any> {
     try {
       let response = await this.apiget('datastream/' + oid, { datastreamId: dsid });
@@ -234,15 +277,15 @@ export class Redbox2 extends BaseRedbox implements Redbox {
       console.log("Error " + e);
     }
   }
+
+  async getCsrfToken() {
+    try {
+      const resp = await this.ai.get(`${this.cf.baseURL}csrfToken`);
+      console.log(JSON.stringify(resp));
+      this.csrfToken = resp['_csrf'];
+    } catch (e) {
+      console.log(`Error getting CSRF Token:`);
+      console.log(e);
+    }
+  }
 }
-
-
-
-
-
-
-
-
-
-
-

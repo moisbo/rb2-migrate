@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "lib": [
-      "ES2015"
+      "ES2015",
+      "dom"
     ],
     "sourceMap": true,
     "inlineSources": true

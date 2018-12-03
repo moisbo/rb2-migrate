@@ -52,6 +52,20 @@ export class Redbox1 extends BaseRedbox implements Redbox {
 		}
 	}
 
+  async getNumRecords(ptype?: string): Promise<number> {
+   let q = 'packageType:' + ptype;
+   try {
+     let params = { q: q, rows: 1 };
+     let resp = await this.apiget('search', params);
+     let response = resp["response"];
+     let numFound = response["numFound"];
+     return numFound;
+   } catch(e) {
+     console.log("Error " + e);
+     return -1;
+   }
+ }
+
 	/* returns a list of all the items in the
 		 Redbox of the specified type */
 
@@ -254,5 +268,3 @@ export class Redbox1 extends BaseRedbox implements Redbox {
 		}
 	}
 }
-
-

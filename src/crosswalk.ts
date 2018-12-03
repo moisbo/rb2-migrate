@@ -23,11 +23,11 @@ import * as Handlers from './handlers/';
 
 
 
-function get_handler(logger:LogCallback, spec:Object): Handlers.Handler|undefined {
+function get_handler(logger:LogCallback, spec:Object, masterConfig:any = undefined, rbSource: any = undefined, rbDest: any = undefined): Handlers.Handler|undefined {
   const className = spec['handler'];
   if( className in Handlers ) {
     const cl = Handlers[className];
-    var instance = new cl(logger, spec);
+    var instance = new cl(logger, spec, masterConfig, rbSource, rbDest);
     return instance;
   } else {
     return undefined;
@@ -37,8 +37,8 @@ function get_handler(logger:LogCallback, spec:Object): Handlers.Handler|undefine
 // apply_handler - run a handler and if the result is undefined, replace it with
 // {}
 
-function apply_handler(h: Handlers.Handler, original:Object): Object {
-  const out = h.crosswalk(original);
+async function apply_handler(h: Handlers.Handler, original:Object, mainObj?:any) {
+  const out = await h.crosswalk(original, mainObj);
   if( _.isUndefined(out) ) {
     return {};
   } else {
@@ -49,13 +49,13 @@ function apply_handler(h: Handlers.Handler, original:Object): Object {
 // repeat_handler - map a handler over multiple inputs and collapse any undefined
 // results
 
-function repeat_handler(h: Handlers.Handler, originals: Object[]):Object[] {
-  return originals.map((o) => h.crosswalk(o)).filter((o) => o)
+async function repeat_handler(h: Handlers.Handler, originals: Object[], mainObj?:any) {
+  return originals.map( async (o) => await h.crosswalk(o, mainObj)).filter((o) => o)
 }
 
 
 
-export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Object[] {
+export async function crosswalk(cwjson: Object, original: any, logger: LogCallback, rbSource: any = undefined, rbDest: any = undefined) {
   var dest = {};
   const idfield = cwjson['idfield'];
   const oid = original[idfield];
@@ -68,10 +68,11 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
   const ignore = cwjson['ignore'];
 
   for( const srcfield in cwspec ) {
-    var destfield = trfield(cwspec[srcfield], srcfield); 
-    if( srcfield in src ) {
+    var destfield = trfield(cwspec[srcfield], srcfield);
+    // changed to lodash's way of accessing objects using complex paths
+    if( !_.isUndefined(_.get(src, srcfield)) ) {
       if( typeof(cwspec[srcfield]) === 'string' ) {
-        dest[destfield] = src[srcfield];
+        _.set(dest, destfield, _.get(src, srcfield));
         if( dest[destfield] ) {
           logger('crosswalk', srcfield, destfield, "copied", dest[destfield]);
         } else {
@@ -89,17 +90,17 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
           delete src[srcfield];
         } else if( spec["type"] === "record" ) {
           if( "handler" in spec ) {
-            const h = get_handler(logger, spec);
+            const h = get_handler(logger, spec, cwjson, rbSource, rbDest);
             if( h ) {
               if( spec['repeatable'] ) {
                 if( Array.isArray(src[srcfield]) ) {
-                  dest[destfield] = repeat_handler(h, src[srcfield]);
+                  dest[destfield] = await repeat_handler(h, src[srcfield], src);
                 } else {
                   logger('crosswalk', srcfield, destfield, "error: repeatable handler with non-array input", JSON.stringify(src[srcfield]));
                   dest[destfield] = [];
                 }
-              } else { 
-                dest[destfield] = apply_handler(h, src[srcfield]);
+              } else {
+                dest[destfield] = await apply_handler(h, src[srcfield], src);
               }
             } else {
               logger('crosswalk', srcfield, destfield, "error: handler", spec["handler"])
@@ -114,6 +115,10 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
         }
       }
     } else {
+      const spec = cwspec[srcfield];
+      if (!_.isEmpty(spec['default'])  && !_.isUndefined(spec['default'])) {
+        _.set(dest, destfield, spec['default']);
+      }
       if( reqd.includes(destfield) ) {
         logger("crosswalk", srcfield, destfield, "required", null);
       } else {
@@ -135,7 +140,7 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
 
 /* unflatten - preprocessing pass which collects multiple records in the
    rb1.x "field.n." and "field.subfield" formats into proper JSON.
-   
+
    gathers all of the crosswalk fields with type = "record" like so
 
    "outer:field.subfield:one": "value1",
@@ -143,7 +148,7 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
 
    "outer:field": {
        "subfield:one": "value1",
-       "subfield:two": "value2", 
+       "subfield:two": "value2",
        [..]
        }
 
@@ -153,7 +158,7 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
    "repeating:field.1.subfield:two": "value2a",
    "repeating:field.2.subfield:one": "value1b",
    "repeating:field.2.subfield:two": "value2b",
- 
+
    "repeating:field": [
        {
            "subfield:one": "value1a",
@@ -162,7 +167,7 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
        {
            "subfield:one": "value1a",
            "subfield:two": "value2a"
-       } 
+       }
     ]
 
    and now (for repeatable fields without subfields)
@@ -172,7 +177,7 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
 
    "repeating:singleton": {
        "subfield:one": "value1",
-       "subfield:two": "value2", 
+       "subfield:two": "value2",
        [..]
    }
 
@@ -184,7 +189,7 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback):Ob
    output unchanged.
 
 
-*/ 
+*/
 
 function unflatten(cwjson: Object, original: Object, logger: LogCallback): Object {
   const repeatrecord = /^(\d+)\.?(.*)$/;
@@ -198,7 +203,7 @@ function unflatten(cwjson: Object, original: Object, logger: LogCallback): Objec
       const m = field.match(pattern);
       if( m ) {
         // check to see if the field looks like a repeatable
-        // record by matching on a leading (\d)\. 
+        // record by matching on a leading (\d)\.
         var sfield = m[1];
         const m2 = sfield.match(repeatrecord);
         if( m2 ) {
@@ -287,8 +292,8 @@ function getrecordspecs(cwjson: Object): Object {
   }
   return rspecs;
 }
-            
-         
+
+
 
 function trfield(cf: string, old: string): string {
   var f = cf;
@@ -320,7 +325,7 @@ export function validate(required: string[], js: Object, logger:LogCallback): bo
   return ok;
 }
 
-      
+
 
 function valuemap(spec: Object, srcfield: string, destfield: string, srcval: string, logger: LogCallback): string {
   if( "map" in spec ) {
@@ -329,10 +334,9 @@ function valuemap(spec: Object, srcfield: string, destfield: string, srcval: str
       return spec["map"][srcval];
     } else {
       logger("crosswalk", srcfield, destfield, "unmapped", srcval);
-      return "";
+      return spec["default"] ? spec["default"] : "";
     }
   }
   logger("crosswalk", srcfield, destfield, "no map!", srcval);
   return "";
 }
-
