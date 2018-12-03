@@ -1,5 +1,5 @@
 .DS_Store
-config/default.json
+config/default.*
 ~$*.xls*
 .idea
 node_modules
@@ -9,3 +9,4 @@ test/**/*.js
 test/**/*.js.map
 logs/*.log
 report*/**
+
