@@ -48,7 +48,9 @@ describe('dmpt crosswalk metadata', () => {
 
 
 	it('should crosswalk', () => {
-		const [mdu, md2] = crosswalk(cw, md, logger);
+		const res = crosswalk(cw, md, logger);
+		const mdu = res[0];
+		const md2 = res[0];
 		expect(md2).to.not.equal(undefined);
 	});
 
@@ -77,8 +79,10 @@ describe('dataset crosswalk metadata', () => {
 	});
 
 
-	it('should crosswalk', () => {
-		const [mdu, md2] = crosswalk(cw, md, logger);
+	it('should crosswalk', async () => {
+		const res = await crosswalk(cw, md, logger);
+		const mdu = res[0];
+		const md2 = res[1];
 		expect(md2).to.not.equal(undefined);
 	});
 

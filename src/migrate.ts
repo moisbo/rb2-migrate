@@ -232,7 +232,7 @@ async function setpermissions(rbSource: Redbox, rbDest: Redbox, noid: string, oi
 				}
 			}
 		}
-		['view, edit '].map((p) => perms[p] = _.union(perms[p], nperms[p]));
+		['view, edit'].map((p) => perms[p] = _.union(perms[p], nperms[p]));
 	}
 	try {
 		await rbDest.grantPermission(noid, 'view', perms['view']);

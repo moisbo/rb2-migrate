@@ -7,14 +7,14 @@ export class FundingBody extends HandlerBase implements Handler {
 
   crosswalk(o:Object, mainObj?:any): Object|undefined {
 
-    return {
+    return Promise.resolve({
     	'dc_title': o['dc_title'],
     	'dc_identifier': [ o ['dc_identifier'] ],
     	'ID': o['dc_title'],
     	'repository_name': [
     		'Funding Bodies'
     	]
-    };
+    });
   }
 
 }

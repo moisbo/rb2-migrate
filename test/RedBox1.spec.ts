@@ -23,8 +23,7 @@ const selfSubmission = process.env.selfSubmission || 'self-submission';
 
 const rbSource = new Redbox1(cf);
 
-describe('info', () => {
-
+describe('info  from redbox', () => {
 	it('should return info from redbox1', async () => {
 		const info = await rbSource.info();
 		console.log(info);

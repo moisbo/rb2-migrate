@@ -28,8 +28,6 @@ export class Redbox2 extends BaseRedbox implements Redbox {
     this.baseURL += '/' + this.branding + '/' + this.portal;
     this.initApiClient();
   }
-
-
   async info(): Promise<Object> {
     return {};
   }
@@ -74,7 +72,7 @@ export class Redbox2 extends BaseRedbox implements Redbox {
       return -1;
     }
   }
-  
+
   async list(ptype: string, start?:number): Promise<string[]> {
     console.log("About to list");
     if( start === undefined ) {

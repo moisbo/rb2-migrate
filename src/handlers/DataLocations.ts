@@ -26,11 +26,11 @@ export class DataLocations extends HandlerBase implements Handler {
 			}
 		}
 
-		return {
+		return Promise.resolve({
 			'location': o['location'],
 			'type': type,
 			'notes': o['notes']
-		};
+		});
 	}
 
 }

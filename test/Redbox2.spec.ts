@@ -22,6 +22,7 @@ const cf = config.get('servers.' + server);
 const dmpt = process.env.rdmpt || 'dmpt';
 const dataset = process.env.dataset || 'dataset';
 const dataRecord = process.env.selfSubmission || 'dataRecord';
+const rdmp = process.env.rdmp || 'rdmp';
 
 const rbSource = new Redbox1(cf);
 
@@ -30,14 +31,65 @@ const cf2 = config.get('servers.' + server2);
 const rbDest = new Redbox2(cf2);
 
 
-describe('insert into rb2', () => {
+describe('info from redbox', () => {
+	it('should return info from redbox destination', async () => {
+		const infoDest = await rbDest.info();
+		//There is no info api return yet!
+		expect(infoDest);
+	});
+});
+
+describe('insert dmpt into rb2:rdmp', () => {
 
 	const aRecord = process.env.aRecord;
 	assert.notEqual(aRecord, undefined, 'Define a record <aRecord> with environment variable as process.env.aRecord');
 
-	let cw;
-	let md;
-	let [mdu, md2] = [{}, {}];
+	let cw: any;
+	let md: any;
+	let res: any;
+	let mdu: any;
+	let md2: any;
+
+	let report = [ [ 'oid', 'stage', 'ofield', 'nfield', 'status', 'value' ] ];
+	const logger = ( stage, ofield, nfield, msg, value ) => {
+		report.push([aRecord, stage, ofield, nfield, msg, value]);
+	};
+
+	beforeEach(async () => {
+		const cwf = path.join(config.get("crosswalks"), dmpt + '.json');
+		cw = await fs.readJson(cwf);
+		assert.notEqual(cw, undefined, 'could not crosswalk from file');
+		md = await rbSource.getRecord(aRecord);
+		assert.notEqual(md, undefined, 'could not getRecord from rbSource');
+		res = await crosswalk(cw, md, logger, rbSource, rbDest);
+		mdu = res[0];
+		md2 = res[1];
+		assert.notEqual(mdu, undefined, 'could not unflatten crosswalk from rbSource');
+		assert.notEqual(md2, undefined, 'could not crosswalk from rbSource');
+	});
+
+
+	it('should insert rdmp record', async () => {
+		const dest_type = rdmp;
+		const noid = await rbDest.createRecord(md2, dest_type);
+		console.log(noid);
+		expect(noid).to.not.equal(undefined);
+
+	});
+
+});
+
+
+describe('insert dataset into rb2', () => {
+
+	const aRecord = process.env.aRecord;
+	assert.notEqual(aRecord, undefined, 'Define a record <aRecord> with environment variable as process.env.aRecord');
+
+	let cw: any;
+	let md: any;
+	let res: any;
+	let mdu: any;
+	let md2: any;
 
 	let report = [ [ 'oid', 'stage', 'ofield', 'nfield', 'status', 'value' ] ];
 	const logger = ( stage, ofield, nfield, msg, value ) => {
@@ -50,7 +102,9 @@ describe('insert into rb2', () => {
 		assert.notEqual(cw, undefined, 'could not crosswalk from file');
 		md = await rbSource.getRecord(aRecord);
 		assert.notEqual(md, undefined, 'could not getRecord from rbSource');
-		[mdu, md2] = crosswalk(cw, md, logger);
+		res = await crosswalk(cw, md, logger, rbSource, rbDest);
+		mdu = res[0];
+		md2 = res[1];
 		assert.notEqual(mdu, undefined, 'could not unflatten crosswalk from rbSource');
 		assert.notEqual(md2, undefined, 'could not crosswalk from rbSource');
 	});
