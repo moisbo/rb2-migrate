@@ -2,7 +2,7 @@
 // Typescript version of Stash 2 -> 3 migration code
 //
 
-import {Redbox, Redbox1, Redbox2, RDA} from './Redbox';
+import {Redbox, Redbox1, Redbox1Files, Redbox2} from './Redbox';
 import {crosswalk, validate} from './crosswalk';
 import {ArgumentParser} from 'argparse';
 import * as moment from 'moment';
@@ -49,8 +49,10 @@ function connect(server: string): Redbox {
     const cf = config.get('servers.' + server);
     if( cf['version'] === 'Redbox1' ) {
       return new Redbox1(cf);
-    } else if (cf['version'] === 'RDA') {
-      return new RDA(cf);
+    } else if (cf['version'] === 'Redbox1Files') {
+    	return new Redbox1Files(cf);
+    // } else if (cf['version'] === 'RDA') {
+    //   return new RDA(cf);
     } else {
       return new Redbox2(cf);
     }
@@ -138,10 +140,11 @@ async function migrate(options: Object): Promise<void> {
 		// spinner.start();
 		// rbSource.setProgress(s => spinner.setSpinnerTitle(s));
 		var results;
+		const f = { packageType: source_type };
 		if (cw['workflow_step']) {
-			results = await rbSource.listByWorkflowStep(source_type, cw['workflow_step']);
+			results = await rbSource.list({ packageType: source_type, workflow_step: cw['workflow_step']});
 		} else {
-			results = await rbSource.list(source_type);
+			results = await rbSource.list({ packageType: source_type });
 		}
 		if (limit && parseInt(limit) > 0) {
 			results = results.splice(0, limit);
@@ -149,12 +152,21 @@ async function migrate(options: Object): Promise<void> {
 		let n = results.length;
 		var report = [['oid', 'stage', 'ofield', 'nfield', 'status', 'value']];
 		for (var i in results) {
-			let md = await rbSource.getRecord(results[i]);
+			let solr = await rbSource.getSolrDirect(results[i]);
+			console.log("From solr");
+			console.log(JSON.stringify(solr, null, 2));
+			var md = null;
+			try {
+				md = await rbSource.getRecord(results[i]);
+			} catch(e) {
+				report.push([results[i], 'fetch', '', '', 'get failed',e]);
+				continue;
+			}
 			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, results.length));
-			const oid = md[cw['idfield']] || results[i]; //Some records do not contain the oid in its metadata!
-			const logger = (stage, ofield, nfield, msg, value) => {
-				report.push([oid, stage, ofield, nfield, msg, value]);
-			};
+				const oid = md[cw['idfield']] || results[i]; //Some records do not contain the oid in its metadata!
+				const logger = (stage, ofield, nfield, msg, value) => {
+					report.push([oid, stage, ofield, nfield, msg, value]);
+				};
 			const [mdu, md2] = crosswalk(cw, md, logger);
 			var noid = 'new_' + oid;
 			if (rbDest) {
@@ -327,6 +339,36 @@ async function info(source: string) {
 	console.log(r);
 }
 
+
+
+async function query(options: Object): Promise<void> {
+	const source = options['source'];
+	const query = options['query'];
+
+	var queryObject = null;
+
+	try {
+		queryObject = JSON.parse(query);		
+	} catch(e) {
+		log.error("Invalid JSON passed to query");
+		throw new Error(e);
+	}
+
+	var rbSource = null;
+
+	try {
+		rbSource = connect(source);
+	} catch (e) {
+		log.error('Error connecting to source rb ' + source + ': ' + e);
+		throw new Error(e);
+	}
+
+	const results = await rbSource.list(queryObject);
+
+	console.log(JSON.stringify(results));
+}
+
+
 const log = getlogger();
 
 var parser = new ArgumentParser({
@@ -385,10 +427,22 @@ parser.addArgument(
 	}
 );
 
+parser.addArgument(
+	['-q', '--query'],
+	{
+		help: "Run a Solr query string on the source ReDBox",
+		defaultValue: null
+	}
+);
+
+
 var args = parser.parseArgs();
 
-if ('file' in args && args['file']) {
+if( 'query' in args && args['query'] ) {
+	query(args);
+} else if ('file' in args && args['file']) {
 	migrate(args);
 } else {
+	console.log("Note: the info stuff is obsolete");
 	info(args['source']);
 }

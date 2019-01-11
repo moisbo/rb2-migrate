@@ -69,14 +69,19 @@ export class Redbox1 extends BaseRedbox implements Redbox {
 	/* returns a list of all the items in the
 		 Redbox of the specified type */
 
-	async list(ptype: string, start?: number): Promise<string[]> {
-		let q = 'packageType:' + ptype;
+  /* changed this to a general filter, haven't applied this to rb2 or the rb interface yet */
+
+	async list(filter: Object, start?: number): Promise<string[]> {
+		// let q = 'packageType:' + ptype;
+		const q = this.makeSolrQuery(filter);
 		if (start === undefined) {
 			start = 0;
 		}
 		try {
+			const message = util.format("Solr search: %s: %d", q, start);
+			console.log(message)
 			if (this.progress) {
-				this.progress(util.format("Searching for %s: %d", ptype, start));
+				this.progress(message);
 			}
 			let params = {q: q, start: start};
 			let resp = await this.apiget('search', params);
@@ -85,9 +90,10 @@ export class Redbox1 extends BaseRedbox implements Redbox {
 				let numFound = response["numFound"];
 				let docs = response["docs"];
 				let ndocs = docs.length;
+				console.log("Got " + ndocs); 
 				let list = docs.map(d => d.id);
 				if (start + ndocs < numFound) {
-					let rest = await this.list(ptype, start + ndocs);
+					let rest = await this.list(filter, start + ndocs);
 					list = list.concat(rest);
 					return list;
 				} else {
@@ -102,34 +108,38 @@ export class Redbox1 extends BaseRedbox implements Redbox {
 		}
 	}
 
-	async listByWorkflowStep(packageType: string, workflowStep: string, start?: number) {
-		let q = `workflow_step:${workflowStep}%20AND%20packageType:${packageType}`;
-		if (start === undefined) {
-			start = 0;
-		}
-		try {
-			if (this.progress) {
-				this.progress(util.format("Searching for %s: %d", workflowStep, start));
-			}
-			let params = {q: q, start: start};
-			let resp = await this.apiget('search', params);
-			let response = resp["response"];
-			let numFound = response["numFound"];
-			let docs = response["docs"];
-			let ndocs = docs.length;
-			let list = docs.map(d => d.id);
-			if (start + ndocs < numFound) {
-				let rest = await this.listByWorkflowStep(packageType, workflowStep, start + ndocs);
-				list = list.concat(rest);
-				return list
-			} else {
-				return list;
-			}
-		} catch (e) {
-			console.log("listByWorkflowStep Redbox1 Items Error " + e);
-			return [];
-		}
-	}
+	makeSolrQuery(filter: Object): string {
+		return Object.keys(filter).map(k => k + ':' + filter[k]).join('%20AND%20');
+	} 
+
+	// async listByWorkflowStep(packageType: string, workflowStep: string, start?: number) {
+	// 	let q = `workflow_step:${workflowStep}%20AND%20packageType:${packageType}`;
+	// 	if (start === undefined) {
+	// 		start = 0;
+	// 	}
+	// 	try {
+	// 		if (this.progress) {
+	// 			this.progress(util.format("Searching for %s: %d", workflowStep, start));
+	// 		}
+	// 		let params = {q: q, start: start};
+	// 		let resp = await this.apiget('search', params);
+	// 		let response = resp["response"];
+	// 		let numFound = response["numFound"];
+	// 		let docs = response["docs"];
+	// 		let ndocs = docs.length;
+	// 		let list = docs.map(d => d.id);
+	// 		if (start + ndocs < numFound) {
+	// 			let rest = await this.listByWorkflowStep(packageType, workflowStep, start + ndocs);
+	// 			list = list.concat(rest);
+	// 			return list
+	// 		} else {
+	// 			return list;
+	// 		}
+	// 	} catch (e) {
+	// 		console.log("listByWorkflowStep Redbox1 Items Error " + e);
+	// 		return [];
+	// 	}
+	// }
 
 	/* createRecord - add an object via the api.
 
@@ -253,6 +263,24 @@ export class Redbox1 extends BaseRedbox implements Redbox {
 				return sresp['docs'][0]['security_exception'];
 			} else {
 				return [];
+			}
+		}
+	}
+
+
+	async getSolrDirect(oid: string): Promise<Object> {
+		const url = 'select';
+		const params = {
+			q: util.format('(id:%s AND item_type:object)', oid),
+			wt: 'json'
+		};
+		let response = await this.solrAi.get(url, {params: params});
+		if (response.status === 200) {
+			const sresp = response.data['response'];
+			if (sresp['numFound']) {
+				return sresp['docs'][0];
+			} else {
+				return {};
 			}
 		}
 	}

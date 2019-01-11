@@ -26,7 +26,7 @@ export interface Redbox {
   setProgress(pf: (message: string) => void): void;
 
   info(): Promise<Object>;
-  list(oid: string, start?:number, limit?:number ): Promise<string[]>;
+  list(ptype: string, start?:number, limit?:number ): Promise<string[]>;
   createRecord(metadata: Object, packagetype: string, options?: Object): Promise<string|undefined>;
   // deleteRecord(oid: string): Promise<bool>;
   getRecord(oid: string): Promise<Object|undefined>;
