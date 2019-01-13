@@ -51,7 +51,8 @@ export class Redbox1Files extends BaseRedbox implements Redbox {
 	
 	async list(filt: Object, start?: number): Promise<string[]> {
 		const records = await this.load_files(filt);
-		return records.map(r => r['oid']);   // what about the ones which don't have one?
+		console.log(JSON.stringify(records));
+		return records.map(r => { return r['oid'] });   // what about the ones which don't have one?
 	}
 
 
@@ -69,7 +70,6 @@ export class Redbox1Files extends BaseRedbox implements Redbox {
 		try {
 			const { stdout, stderr } = await exec(cmd);
 			const files = stdout.split("\n").slice(0, -1);
-			console.log(files);
 			for( var i in files ) {
 				const fn = files[i];
 				try {
@@ -78,25 +78,34 @@ export class Redbox1Files extends BaseRedbox implements Redbox {
 						o['oid'] = this.path2oid(fn);
 					}
 					this.cache[o['oid']] = o;
+					console.log(`Cached ${o['oid']}`);
 				} catch(e) {
-					console.error("JSON parse error loading" + fn);
-					console.error(e);
+					console.error("JSON parse error loading " + fn);
 				}
 			}
 
+			const oids = Object.keys(this.cache);
+			console.log(oids);
+
 			this.loaded = true;
+			console.log(`Pattern to match: ${JSON.stringify(pattern)}`);
 			if( Object.keys(pattern).length === 0 ) {
 				return Object.keys(this.cache);
 			} else {
+				const fields = Object.keys(pattern);
 				return Object.keys(this.cache).filter((oid) => {
 					const record = this.cache[oid];
-					for( var f in Object.keys(pattern) ) {
-						if( record[f] && record[f] === pattern[f] ) {
+					for( var f in fields ) {
+						const field = fields[f];
+						console.log(`field ${field} - value ${record[field]}`);
+						if( record[field] === pattern[field] ) {
+							console.log(`${oid} pattern matched ${field} ${pattern[field]}`);
 							return true;
 						}
 					}
+					console.log(`${oid} no pattern match`);
 					return false;
-				});
+				}).map((oid) => { return this.cache[oid] });
 			}
 		} catch(e) {
 			console.error("Error scanning files");
