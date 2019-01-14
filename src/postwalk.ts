@@ -3,6 +3,7 @@ const _ = require('lodash');
 export function postwalk(tasks, recordMeta, logger) {
 
 	tasks.forEach((task) => {
+		console.log("Running postwalk for " + JSON.stringify(task));
 		recordMeta = methods[task['name']](task['fields'], recordMeta, logger)
 	});
 

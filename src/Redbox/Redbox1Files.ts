@@ -21,9 +21,10 @@ const fs = require('fs-extra');
  */
 
 
-export class Redbox1Files extends BaseRedbox implements Redbox {
+export class Redbox1Files extends Redbox implements Redbox {
 
 	cache: Object;
+	errors: Object;
 	loaded: boolean;
 
 	constructor(cf: Object) {
@@ -51,7 +52,6 @@ export class Redbox1Files extends BaseRedbox implements Redbox {
 	
 	async list(filt: Object, start?: number): Promise<string[]> {
 		const records = await this.load_files(filt);
-		console.log(JSON.stringify(records));
 		return records.map(r => { return r['oid'] });   // what about the ones which don't have one?
 	}
 
@@ -64,31 +64,32 @@ export class Redbox1Files extends BaseRedbox implements Redbox {
 	// subsequent calls to getRecord get their json from the cache.
 
 
+
+
 	async load_files(pattern: Object): Promise<Object[]> {
 		const cmd = `find ${this.baseURL} -name "*.tfpackage"`;
 		this.cache = {};
+		this.errors = {};
 		try {
 			const { stdout, stderr } = await exec(cmd);
 			const files = stdout.split("\n").slice(0, -1);
 			for( var i in files ) {
 				const fn = files[i];
+				const oid = this.path2oid(fn);
 				try {
 					const o = await fs.readJSON(fn);
 					if( ! o['oid'] ) {
-						o['oid'] = this.path2oid(fn);
+						o['oid'] = oid;
 					}
 					this.cache[o['oid']] = o;
-					console.log(`Cached ${o['oid']}`);
 				} catch(e) {
-					console.error("JSON parse error loading " + fn);
+					this.errors[oid] = e.message;
 				}
 			}
 
 			const oids = Object.keys(this.cache);
-			console.log(oids);
 
 			this.loaded = true;
-			console.log(`Pattern to match: ${JSON.stringify(pattern)}`);
 			if( Object.keys(pattern).length === 0 ) {
 				return Object.keys(this.cache);
 			} else {
@@ -97,13 +98,10 @@ export class Redbox1Files extends BaseRedbox implements Redbox {
 					const record = this.cache[oid];
 					for( var f in fields ) {
 						const field = fields[f];
-						console.log(`field ${field} - value ${record[field]}`);
 						if( record[field] === pattern[field] ) {
-							console.log(`${oid} pattern matched ${field} ${pattern[field]}`);
 							return true;
 						}
 					}
-					console.log(`${oid} no pattern match`);
 					return false;
 				}).map((oid) => { return this.cache[oid] });
 			}
@@ -113,6 +111,8 @@ export class Redbox1Files extends BaseRedbox implements Redbox {
 			return 
 		}
 	}
+
+
 
 
 	path2oid(fn: string): string {

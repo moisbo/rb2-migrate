@@ -138,9 +138,9 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback): O
 	}
 	for (const srcfield in src) {
 		if (!ignore.includes(srcfield)) {
-			logger("postwalk", srcfield, "", "unmatched", src[srcfield]);
+			logger("omitted", srcfield, "", "unmatched", src[srcfield]);
 		} else {
-			logger("postwalk", srcfield, "", "ignored", src[srcfield]);
+			logger("omitted", srcfield, "", "ignored", src[srcfield]);
 		}
 	}
 

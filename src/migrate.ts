@@ -149,9 +149,20 @@ async function migrate(options: Object): Promise<void> {
 			results = results.splice(0, limit);
 		}
 		log.info(`Received ${results.length} oids`);
-		let n = results.length;
+		const n_old = results.length;
+		var n_crosswalked = 0;
+		var n_created = 0;
+		var n_pub = 0;
+
+		const errors = rbSource.errors;
 		var report = [['oid', 'stage', 'ofield', 'nfield', 'status', 'value']];
-		log.info(JSON.stringify(results));
+
+		const n_errors = Object.keys(errors).length;
+		for( var oid in errors ) {
+			report.push([oid, 'list', '', '', 'error', errors[oid]]);
+		}
+
+
 		for (var i in results) {
 			log.info(`Processing oid ${results[i]}`);
 			let md = await rbSource.getRecord(results[i]);
@@ -162,15 +173,20 @@ async function migrate(options: Object): Promise<void> {
 			}
 			const oid = md[cw['idfield']] || results[i]; //Some records do not contain the oid in its metadata!
 			const logger = (stage, ofield, nfield, msg, value) => {
+				if( stage === 'postwalk' ) {
+					console.trace("postwalk logger");
+				}
 				report.push([oid, stage, ofield, nfield, msg, value]);
 			};
 			const [mdu, md2] = crosswalk(cw, md, logger);
+			n_crosswalked += 1;
 			var noid = 'new_' + oid;
 			if (rbDest) {
 				if (validate(cw['required'], md2, logger)) {
 					try {
 						noid = await rbDest.createRecord(md2, dest_type);
 						if (noid) {
+							n_created += 1;
 							logger('create', '', '', '', noid);
 						} else {
 							logger('create', '', '', 'null noid', '');
@@ -220,6 +236,7 @@ async function migrate(options: Object): Promise<void> {
 						} catch (e) {
 							logger('getRecord', '', '', 'getRecord for publication failed', e);
 						}
+						n_pub += 1;
 						const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
 					}
 				}
@@ -232,8 +249,22 @@ async function migrate(options: Object): Promise<void> {
 
 		//spinner.setSpinnerTitle('Done.');
 		//spinner.stop();
-		console.log('\n');
+
+
 		await writereport(outdir, report);
+
+		const summary = `Summary
+${n_old} records read from ${source}
+${n_errors} records had JSON errors
+${n_crosswalked} crosswalked 
+${n_created} created as ${dest_type} in ${dest}
+${n_pub} created as publications in ${dest}
+`;
+
+		console.log(summary);
+		log.info(summary);
+
+
 	} catch (e) {
 		log.error('Migration error:' + e);
 		var stack = e.stack;
