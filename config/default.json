@@ -4,7 +4,7 @@
       "version": "Redbox1",
       "baseURL": "https://test-redbox.research.uts.edu.au/redbox/api/v1",
       "apiKey": "29us0fw984yrw9",
-      "solrURL": "https://test-3redbox.research.uts.edu.au/redbox-solr/fascinator",
+      "solrURL": "https://test-redbox.research.uts.edu.au/redbox-solr/fascinator",
       "packageTypes": [ "dmpt", "dataset", "self-submission" ],
       "crosswalks": {
         "dmpt": "rdmp",
@@ -20,9 +20,10 @@
     },
     "Test1_9_files": {
       "version": "Redbox1Files",
-      "baseURL": "./test/storage",
-      "apiKey": "",
-      "solrURL": "",
+      "baseURL": "https://test-redbox.research.uts.edu.au/redbox/api/v1",
+      "apiKey": "29us0fw984yrw9",
+      "solrURL": "https://test-redbox.research.uts.edu.au/redbox-solr/fascinator",
+      "files": "./test/storage",
       "packageTypes": [ "dmpt", "dataset", "self-submission" ],
       "crosswalks": {
         "dmpt": "rdmp",

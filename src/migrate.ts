@@ -149,6 +149,7 @@ async function migrate(options: Object): Promise<void> {
 			results = results.splice(0, limit);
 		}
 		log.info(`Received ${results.length} oids`);
+		process.exit();
 		const n_old = results.length;
 		var n_crosswalked = 0;
 		var n_created = 0;
@@ -252,6 +253,7 @@ async function migrate(options: Object): Promise<void> {
 
 
 		await writereport(outdir, report);
+		// write index
 
 		const summary = `Summary
 ${n_old} records read from ${source}
