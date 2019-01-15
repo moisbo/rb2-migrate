@@ -90,7 +90,7 @@ async function migrate(options: Object): Promise<void> {
 	const dest = options['dest'];
 	const crosswalk_file = options['file'];
 	const dateReport = moment().format('DDMMYYHHMMSS');
-	const outdir = options['outdir'] || path.join(process.cwd(), `report_${crosswalk_file}_${dateReport}`);
+	const outdir = path.join(options['outdir'], `report_${crosswalk_file}_${dateReport}`);
 	const limit = options['number'];
 
 	const cw = await loadcrosswalk(`${crosswalk_file}.json`);
@@ -251,9 +251,25 @@ async function migrate(options: Object): Promise<void> {
 		//spinner.setSpinnerTitle('Done.');
 		//spinner.stop();
 
+		// appending timestamps to the reports so that we can have more than one 
+		// open in Excel at the same time :p
 
-		await writereport(outdir, report);
-		// write index
+		// index has one row for each record with metadata and crosswalk status.
+		// report goes into excruciating detail with a row for each field in each
+		// record.
+
+		// TODO: inject some more helpful things like the title and description
+
+		const index_headers = ['oid', 'packageType', 'owner', 'date_created', 'date_modified', 'rules_oid' ];
+
+		const index = [ index_headers ];
+
+		for( oid in rbSource.index ) {
+			index.push(index_headers.map((f) => { return rbSource.index[oid][f] }));
+		}
+
+		await writereport(outdir, index, `index_${dateReport}.csv`);
+		await writereport(outdir, report, `report_${dateReport}.csv`);
 
 		const summary = `Summary
 ${n_old} records read from ${source}
@@ -355,8 +371,8 @@ async function dumpjson(outdir: string, oid: string, noid: string, md: Object, m
 }
 
 
-async function writereport(outdir: string, report: Object): Promise<void> {
-	const csvfn = path.join(outdir, 'report.csv');
+async function writereport(outdir: string, report: Object, filename: string): Promise<void> {
+	const csvfn = path.join(outdir, filename);
 	const csvstr = stringify(report);
 	await fs.outputFile(csvfn, csvstr);
 }
@@ -407,7 +423,7 @@ parser.addArgument(
 	['-o', '--outdir'],
 	{
 		help: 'Write diagnostics and logs to this directory.',
-		defaultValue: null
+		defaultValue: './'
 	}
 );
 

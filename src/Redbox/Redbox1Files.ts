@@ -17,10 +17,10 @@ const fs = require('fs-extra');
 
 
 const OBJECT_METADATA = 'TF-OBJ-META';
-const OBJECT_RE = /jsonConfigPid=([^.]+)\.json/;
+const OBJECT_RE = /^([^=]+)=(.+)/;
+const PACKAGE_KEY = 'jsonConfigPid';
 
 const WORKFLOW_METADATA = 'workflow.metadata';
-//const WORKFLOW_RE = /"step":\s+"([^\"]+)")/;
 const WORKFLOW_RE = /"step":\s+"([^"]+)"/;
 
 /* Hacking a "redbox 1.x" api which just gets the JSON from 
@@ -93,17 +93,24 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 				const [ dir, oid ] = this.parsePath(fn);
 				this.index[oid] = {};
 				try {
-					const om = await fs.readFile(path.join(dir, OBJECT_METADATA));
-					const m = om.toString().match(OBJECT_RE);
-					if( m ) {
-						this.index[oid]['packageType'] = m[1];
+					const om = await this.readObjectMetadata(dir);
+					if( om[PACKAGE_KEY] ) {
+						const p_array = om[PACKAGE_KEY].split('.');
+						this.index[oid]['packageType'] = p_array[0];
 					} else {
 						this.index[oid]['packageType'] = 'NOT FOUND';
 					}
+					this.index[oid]['owner'] = om['owner'];
+					this.index[oid]['date_created'] = om['date_object_created'];
+					this.index[oid]['date_modified'] = om['date_object_modified'];
+					this.index[oid]['rules_oid'] = om['rulesOid'];
+
+					// the workflow.metadata files are json, but a lot of them are invalid
+					// so I'm using a regexp
 					const wm = await fs.readFile(path.join(dir, WORKFLOW_METADATA));
-					const m2 = wm.toString().match(WORKFLOW_RE);
-					if( m2 ) {
-						this.index[oid]['workflow_step'] = m2[1];
+					const m = wm.toString().match(WORKFLOW_RE);
+					if( m ) {
+						this.index[oid]['workflow_step'] = m[1];
 					} else {
 						this.index[oid]['workflow_step'] = 'NOT FOUND';
 					}
@@ -147,6 +154,18 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 		const d = parts.slice(0, parts.length - 1).join('/');
 		const f = parts.slice(-1)[0];
 		return [ d, f ];
+	}
+
+	async readObjectMetadata(dir: string): Promise<Object> {
+		const om = await fs.readFile(path.join(dir, OBJECT_METADATA));
+		const o = {}
+		om.toString().split('\n').map((l) => {
+			const m = l.match(OBJECT_RE);
+			if( m ) {
+				o[m[1]] = m[2];
+			}
+		});
+		return o;
 	}
 
 
