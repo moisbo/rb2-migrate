@@ -88,8 +88,8 @@ async function loadcrosswalk(packagetype: string): Promise<Object | undefined> {
 async function migrate(options: Object): Promise<void> {
 	const source = options['source'];
 	const dest = options['dest'];
-	const crosswalk_file = options['file'];
-	const dateReport = moment().format('DDMMYYHHMMSS');
+	const crosswalk_file = options['crosswalk'];
+	const dateReport = moment().format('YYMMDDHHMMSS');
 	const outdir = path.join(options['outdir'], `report_${crosswalk_file}_${dateReport}`);
 	const limit = options['number'];
 
@@ -186,17 +186,18 @@ ${rbSource.count_success} records parsed matching ${crosswalk_file}
 			let md = await rbSource.getRecord(oids[i]);
 			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, oids.length));
 			if( !md ) {
-				// log.error(`Missing record for ${oids[i]}`);
+				log.error(`Couldn't get record for ${oids[i]}`);
+				rbSource.index[oids[i]]['status'] = 'load failed';
 				continue;
 			}
 			const oid = md[cw['idfield']] || oids[i]; //Some records do not contain the oid in its metadata!
+			rbSource.index[oid]['title'] = md['dc:title'];
+			rbSource.index[oid]['title'] = md['dc:description'];
 			const logger = (stage, ofield, nfield, msg, value) => {
-				if( stage === 'postwalk' ) {
-					console.trace("postwalk logger");
-				}
 				report.push([oid, stage, ofield, nfield, msg, value]);
 			};
 			const [mdu, md2] = crosswalk(cw, md, logger);
+			rbSource.index[oid] = 'crosswalked';
 			n_crosswalked += 1;
 			var noid = 'new_' + oid;
 			if (rbDest) {
@@ -205,6 +206,7 @@ ${rbSource.count_success} records parsed matching ${crosswalk_file}
 						noid = await rbDest.createRecord(md2, dest_type);
 						if (noid) {
 							n_created += 1;
+							rbSource.index[oid] = 'migrated';
 							logger('create', '', '', '', noid);
 						} else {
 							logger('create', '', '', 'null noid', '');
@@ -276,7 +278,6 @@ ${rbSource.count_success} records parsed matching ${crosswalk_file}
 		// record.
 
 		// TODO: inject some more helpful things like the title and description
-
 
 		await writeindex(outdir, rbSource.index, `index_${dateReport}.csv`);
 		await writeerrors(outdir, rbSource.errors, `errors_${dateReport}.csv`);
@@ -385,8 +386,8 @@ async function dumpjson(outdir: string, oid: string, noid: string, md: Object, m
 
 async function writeindex(outdir: string, index_o: Object, filename: string): Promise<void> {
 	const index_headers = [
-	'oid', 'file', 'packageType', 'workflow_step', 'owner',
-	'date_created', 'date_modified', 'rules_oid'
+	'oid', 'file', 'packageType', 'workflow_step', 'owner', 'title', 'description',
+	'status', 'date_created', 'date_modified', 'rules_oid'
 	];
 
 	const index = [ index_headers ];
@@ -429,6 +430,19 @@ async function info(source: string) {
 	const rbSource = connect(source);
 	const r = await rbSource.info();
 	console.log(r);
+  const crosswalk_d = config.get('crosswalks');
+  if( crosswalk_d ) {
+  	console.log("Available crosswalks:");
+	  const d = await fs.readdir(crosswalk_d);
+  	d.map((f) => {
+  		var m = f.match(/^(.*?)\.json$/);
+  		if( m ) {
+  			console.log(m[1]);
+  		}
+  	});
+  } else {
+  	console.log("No crosswalks configured");
+  }
 }
 
 const log = getlogger();
@@ -441,9 +455,9 @@ var parser = new ArgumentParser({
 
 
 parser.addArgument(
-	['-f', '--file'],
+	['-c', '--crosswalk'],
 	{
-		help: 'Crosswalk file to use (with the .json missing)',
+		help: 'Crosswalk (package type + workflow step). Leave empty for a list of available crosswalks.',
 		defaultValue: null
 	}
 );
@@ -501,7 +515,7 @@ parser.addArgument(
 
 var args = parser.parseArgs();
 
-if ('file' in args && args['file']) {
+if ('crosswalk' in args && args['crosswalk']) {
 	migrate(args);
 } else {
 	info(args['source']);

@@ -104,8 +104,8 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 						this.index[oid]['packageType'] = 'NOT FOUND';
 					}
 					this.index[oid]['owner'] = om['owner'];
-					this.index[oid]['date_created'] = om['date_object_created'].replace(/\\/g,'');
-					this.index[oid]['date_modified'] = om['date_object_modified'].replace(/\\/g,'');
+					this.index[oid]['date_created'] = this.cleanDate(om['date_object_created']);
+					this.index[oid]['date_modified'] = this.cleanDate(om['date_object_modified']);
 					this.index[oid]['rules_oid'] = om['rulesOid'];
 
 					// the workflow.metadata files are json, but a lot of them are invalid
@@ -127,10 +127,10 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 			this.count_files = files.length;
 			this.count_errors = Object.keys(this.errors).length;
 			const oids = Object.keys(this.index);
-			this.count_success = oids.length;
 
 			this.loaded = true;
 			if( Object.keys(pattern).length === 0 ) {
+				this.count_success = oids.length;
 				return Object.keys(this.index).map((oid => { return this.index[oid] }));
 			} else {
 				const fields = Object.keys(pattern);
@@ -149,6 +149,7 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 					}
 				}
 				this.index = nindex;
+				this.count_success = Object.keys(nindex).length;
 				return Object.keys(this.index).map((oid) => { return this.index[oid] });
 			}
 		} catch(e) {
@@ -159,6 +160,13 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 	}
 
 
+	cleanDate(date: string): string {
+		if( typeof(date) === 'string' ) {
+			return date.replace(/\\/g,'');
+	  } else {
+	  	return date;
+	  }
+	}
 
 
 	parsePath(sPath: string): string[] {
