@@ -135,22 +135,23 @@ async function migrate(options: Object): Promise<void> {
 	}
 
 	try {
+
 		// var spinner = new Spinner("Listing records: " + source_type);
 		// spinner.setSpinnerString(17);
 		// spinner.start();
 		// rbSource.setProgress(s => spinner.setSpinnerTitle(s));
-		var results;
+
+		var oids;
 		if (cw['workflow_step']) {
-			results = await rbSource.list({ packageType: source_type, workflow_step: cw['workflow_step'] });
+			oids = await rbSource.list({ packageType: source_type, workflow_step: cw['workflow_step'] });
 		} else {
-			results = await rbSource.list({ packageType: source_type });
+			oids = await rbSource.list({ packageType: source_type });
 		}
 		if (limit && parseInt(limit) > 0) {
-			results = results.splice(0, limit);
+			oids = oids.splice(0, limit);
 		}
-		log.info(`Received ${results.length} oids`);
-		process.exit();
-		const n_old = results.length;
+		log.info(`Received ${oids.length} oids`);
+		const n_old = oids.length;
 		var n_crosswalked = 0;
 		var n_created = 0;
 		var n_pub = 0;
@@ -163,16 +164,32 @@ async function migrate(options: Object): Promise<void> {
 			report.push([oid, 'list', '', '', 'error', errors[oid]]);
 		}
 
+		if( options['index'] ) {
 
-		for (var i in results) {
-			log.info(`Processing oid ${results[i]}`);
-			let md = await rbSource.getRecord(results[i]);
-			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, results.length));
+
+			const summary = `Summary
+${rbSource.count_files} files read from ${rbSource.files}
+${rbSource.count_errors} parse errors
+${rbSource.count_success} records parsed matching ${crosswalk_file}
+`;
+
+			console.log(summary);
+			log.info(summary);
+
+			await writeindex(outdir, rbSource.index, `index_${dateReport}.csv`);
+			await writeerrors(outdir, rbSource.errors, `errors_${dateReport}.csv`);
+			return;
+		}
+
+		for (var i in oids) {
+			log.info(`Processing oid ${oids[i]}`);
+			let md = await rbSource.getRecord(oids[i]);
+			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, oids.length));
 			if( !md ) {
-				// log.error(`Missing record for ${results[i]}`);
+				// log.error(`Missing record for ${oids[i]}`);
 				continue;
 			}
-			const oid = md[cw['idfield']] || results[i]; //Some records do not contain the oid in its metadata!
+			const oid = md[cw['idfield']] || oids[i]; //Some records do not contain the oid in its metadata!
 			const logger = (stage, ofield, nfield, msg, value) => {
 				if( stage === 'postwalk' ) {
 					console.trace("postwalk logger");
@@ -260,20 +277,15 @@ async function migrate(options: Object): Promise<void> {
 
 		// TODO: inject some more helpful things like the title and description
 
-		const index_headers = ['oid', 'packageType', 'owner', 'date_created', 'date_modified', 'rules_oid' ];
 
-		const index = [ index_headers ];
-
-		for( oid in rbSource.index ) {
-			index.push(index_headers.map((f) => { return rbSource.index[oid][f] }));
-		}
-
-		await writereport(outdir, index, `index_${dateReport}.csv`);
+		await writeindex(outdir, rbSource.index, `index_${dateReport}.csv`);
+		await writeerrors(outdir, rbSource.errors, `errors_${dateReport}.csv`);
 		await writereport(outdir, report, `report_${dateReport}.csv`);
 
 		const summary = `Summary
-${n_old} records read from ${source}
-${n_errors} records had JSON errors
+${rbSource.count_files} files read from ${rbSource.files}
+${rbSource.count_errors} parse errors
+${rbSource.count_success} records parsed matching ${crosswalk_file}
 ${n_crosswalked} crosswalked 
 ${n_created} created as ${dest_type} in ${dest}
 ${n_pub} created as publications in ${dest}
@@ -371,10 +383,44 @@ async function dumpjson(outdir: string, oid: string, noid: string, md: Object, m
 }
 
 
+async function writeindex(outdir: string, index_o: Object, filename: string): Promise<void> {
+	const index_headers = [
+	'oid', 'file', 'packageType', 'workflow_step', 'owner',
+	'date_created', 'date_modified', 'rules_oid'
+	];
+
+	const index = [ index_headers ];
+
+	for( var oid in index_o ) {
+		index.push(index_headers.map((f) => { return index_o[oid][f] }));
+	}
+
+	await writereport(outdir, index, filename);
+}
+
+
+async function writeerrors(outdir: string, errors_o: Object, filename: string): Promise<void> {
+	const error_headers = [
+	'oid', 'file', 'error'
+	];
+
+	const errors = [ error_headers ];
+
+	for( var oid in errors_o ) {
+		errors.push(error_headers.map((f) => { return errors_o[oid][f] }));
+	}
+
+	await writereport(outdir, errors, filename);
+}
+
+
+
 async function writereport(outdir: string, report: Object, filename: string): Promise<void> {
 	const csvfn = path.join(outdir, filename);
+	console.log(`Writing csv to ${csvfn}: ${JSON.stringify(report[0])}`);
 	const csvstr = stringify(report);
 	await fs.outputFile(csvfn, csvstr);
+	console.log('Done');
 }
 
 
@@ -436,9 +482,19 @@ parser.addArgument(
 );
 
 parser.addArgument(
+	['-i', '--index'],
+	{
+		help: 'Index-only mode: just scans storage and writes index.csv',
+		action: 'storeTrue',
+		defaultValue: false
+	}
+);
+
+parser.addArgument(
 	['-p', '--publish'],
 	{
-		help: 'Copys records into publication draft',
+		help: 'Copies records into publication draft',
+		action: 'storeTrue',
 		defaultValue: false
 	}
 );

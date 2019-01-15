@@ -36,6 +36,9 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 
 	files: string;
 	index: Object;
+	count_files: number;
+	count_errors: number;
+	count_success: number;
 	errors: Object;
 	loaded: boolean;
 
@@ -66,7 +69,7 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 	
 	async list(filt: Object, start?: number): Promise<string[]> {
 		const records = await this.load_files(filt);
-		return records.map(r => { return r['oid'] });   // what about the ones which don't have one?
+		return records.map(r => { return r['oid'] }); 
 	}
 
 
@@ -90,8 +93,8 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 			const files = stdout.split("\n").slice(0, -1);
 			for( var i in files ) {
 				const fn = files[i];
-				const [ dir, oid ] = this.parsePath(fn);
-				this.index[oid] = {};
+				const [ dir, oid, file ] = this.parsePath(fn);
+				this.index[oid] = { 'oid': oid, 'file': file };
 				try {
 					const om = await this.readObjectMetadata(dir);
 					if( om[PACKAGE_KEY] ) {
@@ -101,8 +104,8 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 						this.index[oid]['packageType'] = 'NOT FOUND';
 					}
 					this.index[oid]['owner'] = om['owner'];
-					this.index[oid]['date_created'] = om['date_object_created'];
-					this.index[oid]['date_modified'] = om['date_object_modified'];
+					this.index[oid]['date_created'] = om['date_object_created'].replace(/\\/g,'');
+					this.index[oid]['date_modified'] = om['date_object_modified'].replace(/\\/g,'');
 					this.index[oid]['rules_oid'] = om['rulesOid'];
 
 					// the workflow.metadata files are json, but a lot of them are invalid
@@ -117,27 +120,36 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 				} catch(e) {
 					console.log("error parsing metadata for " + oid);
 					console.log(e.message);
-					this.errors[oid] = e.message;
+					this.errors[oid] = { 'file': file, 'oid': oid, 'error': e.message };
 				}
 			}
 
+			this.count_files = files.length;
+			this.count_errors = Object.keys(this.errors).length;
 			const oids = Object.keys(this.index);
+			this.count_success = oids.length;
 
 			this.loaded = true;
 			if( Object.keys(pattern).length === 0 ) {
-				return Object.keys(this.index);
+				return Object.keys(this.index).map((oid => { return this.index[oid] }));
 			} else {
 				const fields = Object.keys(pattern);
-				return Object.keys(this.index).filter((oid) => {
+				const nindex = {};
+				for( var oid in this.index ) {
 					const record = this.index[oid];
+					var include = true;
 					for( var f in fields ) {
 						const field = fields[f];
-						if( record[field] === pattern[field] ) {
-							return true;
+						if( record[field] !== pattern[field] ) {
+							include = false;
 						}
 					}
-					return false;
-				}).map((oid) => { return this.index[oid] });
+					if( include ) {
+						nindex[oid] = record;
+					}
+				}
+				this.index = nindex;
+				return Object.keys(this.index).map((oid) => { return this.index[oid] });
 			}
 		} catch(e) {
 			console.error("Error scanning files");
@@ -149,11 +161,12 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 
 
 
-	parsePath(fn: string): string[] {
-		const parts = fn.split('/');
+	parsePath(sPath: string): string[] {
+		const parts = sPath.split('/');
 		const d = parts.slice(0, parts.length - 1).join('/');
-		const f = parts.slice(-1)[0];
-		return [ d, f ];
+		const oid = parts.slice(-2)[0];
+		const fn = parts.slice(-1)[0];
+		return [ d, oid, fn ];
 	}
 
 	async readObjectMetadata(dir: string): Promise<Object> {
