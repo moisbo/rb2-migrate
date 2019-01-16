@@ -242,12 +242,15 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 							if (noid) {
 								n_created += 1;
 								nrecord['status'] = 'migrated';
+								nrecord['noid'] = noid;
 								logger('create', '', '', '', noid);
 							} else {
 								logger('create', '', '', 'null noid', '');
+								nrecord['status'] = 'new oid null';
 							}
 						} catch (e) {
 							logger('create', '', '', 'create failed', e);
+							nrecord['status'] = 'migration error';
 						}
 					} else {
 						console.log('\nInvalid or incomplete JSON for ' + oid + ', not migrating');
@@ -408,7 +411,7 @@ async function dumpjson(outdir: string, oid: string, noid: string, md: Object, m
 
 async function writeindex(index_o: Object, filename: string): Promise<void> {
 	const index_headers = [
-	'oid', 'file', 'packageType', 'workflow_step', 'owner', 'title', 'description',
+	'oid', 'noid', 'file', 'packageType', 'workflow_step', 'owner', 'title', 'description',
 	'status', 'date_created', 'date_modified', 'rules_oid'
 	];
 	const index = [ index_headers ];
