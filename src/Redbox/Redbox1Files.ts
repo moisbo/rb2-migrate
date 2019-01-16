@@ -53,7 +53,7 @@ export class Redbox1Files extends Redbox1 implements Redbox {
 
 	async info(): Promise<Object> {
 		return {
-			'description': 'This is a fake RedBox1 api which reads JSON from a copy of the storage/ directory'
+			'description': 'Alternate Redbox1 which uses file storage as the index'
 		};
 	}
 
@@ -65,11 +65,14 @@ export class Redbox1Files extends Redbox1 implements Redbox {
   /* use the find utility to get a list of .tfpackage files from a tree
 
 
-     applies filters in a way which mimics Solr queries */
+     applies filters in a way which mimics Solr queries 
+
+
+     */
 	
 	async list(filt: Object, start?: number): Promise<string[]> {
 		const records = await this.load_files(filt);
-		return records.map(r => { return r['oid'] }); 
+		return records.map((r) => { return r['oid']; })
 	}
 
 

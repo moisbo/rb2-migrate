@@ -24,7 +24,6 @@ const path = require('path');
 const winston = require('winston');
 const stringify = require('csv-stringify/lib/sync');
 const _ = require('lodash');
-import {Spinner} from 'cli-spinner';
 import {postwalk} from './postwalk';
 
 
@@ -42,7 +41,6 @@ function getlogger() {
 		})
 	});
 }
-
 
 function connect(server: string): Redbox {
   if( server ) {
@@ -84,36 +82,45 @@ async function loadcrosswalk(packagetype: string): Promise<Object | undefined> {
 	}
 }
 
+// info: prints out info about a source to STDOUT, including a list of
+// available crosswalk files
 
-async function migrate(options: Object): Promise<void> {
+async function info(source: string) {
+	console.log('Source');
+	const rbSource = connect(source);
+	const r = await rbSource.info();
+	console.log(r);
+  const crosswalk_d = config.get('crosswalks');
+  if( crosswalk_d ) {
+  	console.log("Available crosswalks:");
+	  const d = await fs.readdir(crosswalk_d);
+  	d.map((f) => {
+  		var m = f.match(/^(.*?)\.json$/);
+  		if( m ) {
+  			console.log(m[1]);
+  		}
+  	});
+  	console.log("");
+  	console.log("Run the script with --index and no --crosswalk for a list of all records in --source");
+  } else {
+  	console.log("No crosswalks configured");
+  }
+}
+
+
+
+// index: calls source.list to get a list of oids for the requested
+// crosswalk, or all oids in the source if there's no crosswalk.
+
+// returns two lists of objects: an index of {} representing each
+// oid, and a list of errors
+
+async function index(options: Object): Promise<Object[][]> {
 	const source = options['source'];
-	const dest = options['dest'];
 	const crosswalk_file = options['crosswalk'];
-	const dateReport = moment().format('YYMMDDHHMMSS');
-	const outdir = path.join(options['outdir'], `report_${crosswalk_file}_${dateReport}`);
 	const limit = options['number'];
 
-	const cw = await loadcrosswalk(`${crosswalk_file}.json`);
-	let cwPub, mdPub, mduPub, md2Pub = null;
-	let recordMeta = {};
-	let pubDestType;
-	if (options['publish']) {
-		cwPub = await loadcrosswalk(`${crosswalk_file}.publication.json`);
-	}
-	const source_type = cw['source_type'];
-
-	if (!cw) {
-		return;
-	}
-
-	// if (source_type !== cw['source_type']) {
-	// 	log.error("Source type mismatch: " + source_type + '/' + cw['source_type']);
-	//  throw new Error(e);;
-	// }
-
-	const dest_type = cw['dest_type'];
-
-	var rbSource, rbDest;
+	var rbSource;
 
 	try {
 		rbSource = connect(source);
@@ -122,185 +129,201 @@ async function migrate(options: Object): Promise<void> {
 		throw new Error(e);
 	}
 
-	try {
-		rbDest = connect(dest);
-	} catch (e) {
-		log.error('Error connecting to dest rb ' + dest + ': ' + e);
-		throw new Error(e);
-	}
+	var oids;
 
-	if (outdir) {
-		fs.ensureDirSync(path.join(outdir, 'originals'));
-		fs.ensureDirSync(path.join(outdir, 'new'));
-	}
+	if( crosswalk_file ) {
+		const cw = await loadcrosswalk(`${crosswalk_file}.json`);
+		const source_type = cw['source_type'];
 
-	try {
-
-		// var spinner = new Spinner("Listing records: " + source_type);
-		// spinner.setSpinnerString(17);
-		// spinner.start();
-		// rbSource.setProgress(s => spinner.setSpinnerTitle(s));
-
-		var oids;
 		if (cw['workflow_step']) {
 			oids = await rbSource.list({ packageType: source_type, workflow_step: cw['workflow_step'] });
 		} else {
 			oids = await rbSource.list({ packageType: source_type });
-		}
-		if (limit && parseInt(limit) > 0) {
-			oids = oids.splice(0, limit);
-		}
-		log.info(`Received ${oids.length} oids`);
-		const n_old = oids.length;
-		var n_crosswalked = 0;
-		var n_created = 0;
-		var n_pub = 0;
-
-		const errors = rbSource.errors;
-		var report = [['oid', 'stage', 'ofield', 'nfield', 'status', 'value']];
-
-		const n_errors = Object.keys(errors).length;
-		for( var oid in errors ) {
-			report.push([oid, 'list', '', '', 'error', errors[oid]]);
-		}
-
-		if( options['index'] ) {
-
-
-			const summary = `Summary
-${rbSource.count_files} files read from ${rbSource.files}
-${rbSource.count_errors} parse errors
-${rbSource.count_success} records parsed matching ${crosswalk_file}
-`;
-
-			console.log(summary);
-			log.info(summary);
-
-			await writeindex(outdir, rbSource.index, `index_${dateReport}.csv`);
-			await writeerrors(outdir, rbSource.errors, `errors_${dateReport}.csv`);
-			return;
-		}
-
-		for (var i in oids) {
-			log.info(`Processing oid ${oids[i]}`);
-			let md = await rbSource.getRecord(oids[i]);
-			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, oids.length));
-			if( !md ) {
-				log.error(`Couldn't get record for ${oids[i]}`);
-				rbSource.index[oids[i]]['status'] = 'load failed';
-				continue;
-			}
-			const oid = md[cw['idfield']] || oids[i]; //Some records do not contain the oid in its metadata!
-			rbSource.index[oid]['title'] = md['dc:title'];
-			rbSource.index[oid]['title'] = md['dc:description'];
-			const logger = (stage, ofield, nfield, msg, value) => {
-				report.push([oid, stage, ofield, nfield, msg, value]);
-			};
-			const [mdu, md2] = crosswalk(cw, md, logger);
-			rbSource.index[oid] = 'crosswalked';
-			n_crosswalked += 1;
-			var noid = 'new_' + oid;
-			if (rbDest) {
-				if (validate(cw['required'], md2, logger)) {
-					try {
-						noid = await rbDest.createRecord(md2, dest_type);
-						if (noid) {
-							n_created += 1;
-							rbSource.index[oid] = 'migrated';
-							logger('create', '', '', '', noid);
-						} else {
-							logger('create', '', '', 'null noid', '');
-						}
-					} catch (e) {
-						logger('create', '', '', 'create failed', e);
-					}
-				} else {
-					console.log('\nInvalid or incomplete JSON for ' + oid + ', not migrating');
-				}
-				if (noid && noid !== 'new_' + oid) {
-					try {
-						const perms = await setpermissions(rbSource, rbDest, noid, oid, md2, cw['permissions']);
-						if (perms) {
-							if ('error' in perms) {
-								logger('permissions', '', '', 'permissions failed', perms['error']);
-							} else {
-								logger('permissions', '', '', 'set', perms);
-							}
-						} else {
-							logger('permissions', '', '', 'permissions failed', 'unknown error');
-						}
-					} catch (e) {
-						logger('setpermissions', '', '', 'setpermissions failed', e);
-					}
-					try {
-						recordMeta = await rbDest.getRecord(noid);
-					} catch (e) {
-						logger('getRecord', '', '', 'getRecord failed', e);
-					}
-					try {
-						const newRecordMeta = postwalk(cw['postTasks'], recordMeta, logger);
-						const enoid = await rbDest.updateRecordMetadata(noid, newRecordMeta);
-					} catch (e) {
-						logger('updateRecordMetadata', '', '', 'updateRecordMetadata postwalk failed', e);
-					}
-					if (cwPub) {
-						try {
-							let mdPub = await rbSource.getRecord(oid);
-							const resPub = crosswalk(cwPub, mdPub, logger);
-							mduPub = resPub[0];
-							md2Pub = resPub[1];
-							md2Pub[cwPub['dest_type']] = {
-								oid: noid,
-								title: recordMeta['title']
-							};
-						} catch (e) {
-							logger('getRecord', '', '', 'getRecord for publication failed', e);
-						}
-						n_pub += 1;
-						const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
-					}
-				}
-			}
-
-			if (outdir) {
-				dumpjson(outdir, oid, noid, md, mdu, md2);
-			}
-		}
-
-		//spinner.setSpinnerTitle('Done.');
-		//spinner.stop();
-
-		// appending timestamps to the reports so that we can have more than one 
-		// open in Excel at the same time :p
-
-		// index has one row for each record with metadata and crosswalk status.
-		// report goes into excruciating detail with a row for each field in each
-		// record.
-
-		// TODO: inject some more helpful things like the title and description
-
-		await writeindex(outdir, rbSource.index, `index_${dateReport}.csv`);
-		await writeerrors(outdir, rbSource.errors, `errors_${dateReport}.csv`);
-		await writereport(outdir, report, `report_${dateReport}.csv`);
-
-		const summary = `Summary
-${rbSource.count_files} files read from ${rbSource.files}
-${rbSource.count_errors} parse errors
-${rbSource.count_success} records parsed matching ${crosswalk_file}
-${n_crosswalked} crosswalked 
-${n_created} created as ${dest_type} in ${dest}
-${n_pub} created as publications in ${dest}
-`;
-
-		console.log(summary);
-		log.info(summary);
-
-
-	} catch (e) {
-		log.error('Migration error:' + e);
-		var stack = e.stack;
-		log.error(stack);
+		} 
+	} else {
+		oids = await rbSource.list({});
 	}
+	if (limit && parseInt(limit) > 0) {
+			oids.splice(0, limit);
+	}
+
+	// hack - get all of the index objects out of rbSource
+
+	const records = oids.map((oid) => { return rbSource.index[oid] } );
+
+	const errors = rbSource.errors;
+
+	return [ records, errors ];
+}
+
+
+
+async function migrate(options: Object): Promise<void> {
+// 	const source = options['source'];
+// 	const dest = options['dest'];
+// 	const crosswalk_file = options['crosswalk'];
+// 	const outdir = path.join(options['outdir'], `report_${crosswalk_file}_${dateReport}`);
+// 	const limit = options['number'];
+// 	const source_type = cw['source_type'];
+
+
+// 	const cw = await loadcrosswalk(`${crosswalk_file}.json`);
+// 	let cwPub, mdPub, mduPub, md2Pub = null;
+// 	let recordMeta = {};
+// 	let pubDestType;
+// 	if (options['publish']) {
+// 		cwPub = await loadcrosswalk(`${crosswalk_file}.publication.json`);
+// 	}
+
+
+
+// 	try {
+// 		rbDest = connect(dest);
+// 	} catch (e) {
+// 		log.error('Error connecting to dest rb ' + dest + ': ' + e);
+// 		throw new Error(e);
+// 	}
+
+// 	if (outdir) {
+// 		fs.ensureDirSync(path.join(outdir, 'originals'));
+// 		fs.ensureDirSync(path.join(outdir, 'new'));
+// 	}
+
+
+// 		log.info(`Received ${oids.length} oids`);
+// 		const n_old = oids.length;
+// 		var n_crosswalked = 0;
+// 		var n_created = 0;
+// 		var n_pub = 0;
+
+
+// 		var report = [['oid', 'stage', 'ofield', 'nfield', 'status', 'value']];
+
+// 		const n_errors = Object.keys(errors).length;
+// 		for( var oid in errors ) {
+// 			report.push([oid, 'list', '', '', 'error', errors[oid]]);
+// 		}
+
+
+// 	try {
+
+// 		for (var i in oids) {
+// 			log.info(`Processing oid ${oids[i]}`);
+// 			let md = await rbSource.getRecord(oids[i]);
+// 			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, oids.length));
+// 			if( !md ) {
+// 				log.error(`Couldn't get record for ${oids[i]}`);
+// 				rbSource.index[oids[i]]['status'] = 'load failed';
+// 				continue;
+// 			}
+// 			const oid = md[cw['idfield']] || oids[i]; //Some records do not contain the oid in its metadata!
+// 			rbSource.index[oid]['title'] = md['dc:title'];
+// 			rbSource.index[oid]['title'] = md['dc:description'];
+// 			const logger = (stage, ofield, nfield, msg, value) => {
+// 				report.push([oid, stage, ofield, nfield, msg, value]);
+// 			};
+// 			const [mdu, md2] = crosswalk(cw, md, logger);
+// 			rbSource.index[oid] = 'crosswalked';
+// 			n_crosswalked += 1;
+// 			var noid = 'new_' + oid;
+// 			if (rbDest) {
+// 				if (validate(cw['required'], md2, logger)) {
+// 					try {
+// 						noid = await rbDest.createRecord(md2, dest_type);
+// 						if (noid) {
+// 							n_created += 1;
+// 							rbSource.index[oid] = 'migrated';
+// 							logger('create', '', '', '', noid);
+// 						} else {
+// 							logger('create', '', '', 'null noid', '');
+// 						}
+// 					} catch (e) {
+// 						logger('create', '', '', 'create failed', e);
+// 					}
+// 				} else {
+// 					console.log('\nInvalid or incomplete JSON for ' + oid + ', not migrating');
+// 				}
+// 				if (noid && noid !== 'new_' + oid) {
+// 					try {
+// 						const perms = await setpermissions(rbSource, rbDest, noid, oid, md2, cw['permissions']);
+// 						if (perms) {
+// 							if ('error' in perms) {
+// 								logger('permissions', '', '', 'permissions failed', perms['error']);
+// 							} else {
+// 								logger('permissions', '', '', 'set', perms);
+// 							}
+// 						} else {
+// 							logger('permissions', '', '', 'permissions failed', 'unknown error');
+// 						}
+// 					} catch (e) {
+// 						logger('setpermissions', '', '', 'setpermissions failed', e);
+// 					}
+// 					try {
+// 						recordMeta = await rbDest.getRecord(noid);
+// 					} catch (e) {
+// 						logger('getRecord', '', '', 'getRecord failed', e);
+// 					}
+// 					try {
+// 						const newRecordMeta = postwalk(cw['postTasks'], recordMeta, logger);
+// 						const enoid = await rbDest.updateRecordMetadata(noid, newRecordMeta);
+// 					} catch (e) {
+// 						logger('updateRecordMetadata', '', '', 'updateRecordMetadata postwalk failed', e);
+// 					}
+// 					if (cwPub) {
+// 						try {
+// 							let mdPub = await rbSource.getRecord(oid);
+// 							const resPub = crosswalk(cwPub, mdPub, logger);
+// 							mduPub = resPub[0];
+// 							md2Pub = resPub[1];
+// 							md2Pub[cwPub['dest_type']] = {
+// 								oid: noid,
+// 								title: recordMeta['title']
+// 							};
+// 						} catch (e) {
+// 							logger('getRecord', '', '', 'getRecord for publication failed', e);
+// 						}
+// 						n_pub += 1;
+// 						const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
+// 					}
+// 				}
+// 			}
+
+// 			if (outdir) {
+// 				dumpjson(outdir, oid, noid, md, mdu, md2);
+// 			}
+// 		}
+
+// 		// appending timestamps to the reports so that we can have more than one 
+// 		// open in Excel at the same time :p
+
+// 		// index has one row for each record with metadata and crosswalk status.
+// 		// report goes into excruciating detail with a row for each field in each
+// 		// record.
+
+// 		// TODO: inject some more helpful things like the title and description
+
+// 		await writeindex(outdir, rbSource.index, `index_${dateReport}.csv`);
+// 		await writeerrors(outdir, rbSource.errors, `errors_${dateReport}.csv`);
+// 		await writereport(outdir, report, `report_${dateReport}.csv`);
+
+// 		const summary = `Summary
+// ${rbSource.count_files} files read from ${rbSource.files}
+// ${rbSource.count_errors} parse errors
+// ${rbSource.count_success} records parsed matching ${crosswalk_file}
+// ${n_crosswalked} crosswalked 
+// ${n_created} created as ${dest_type} in ${dest}
+// ${n_pub} created as publications in ${dest}
+// `;
+
+// 		console.log(summary);
+// 		log.info(summary);
+
+
+// 	} catch (e) {
+// 		log.error('Migration error:' + e);
+// 		var stack = e.stack;
+// 		log.error(stack);
+// 	}
 
 }
 
@@ -384,66 +407,67 @@ async function dumpjson(outdir: string, oid: string, noid: string, md: Object, m
 }
 
 
-async function writeindex(outdir: string, index_o: Object, filename: string): Promise<void> {
+async function writeindex(index_o: Object, filename: string): Promise<void> {
 	const index_headers = [
 	'oid', 'file', 'packageType', 'workflow_step', 'owner', 'title', 'description',
 	'status', 'date_created', 'date_modified', 'rules_oid'
 	];
-
 	const index = [ index_headers ];
-
 	for( var oid in index_o ) {
 		index.push(index_headers.map((f) => { return index_o[oid][f] }));
 	}
-
-	await writereport(outdir, index, filename);
+	await writereport(index, filename);
 }
 
 
-async function writeerrors(outdir: string, errors_o: Object, filename: string): Promise<void> {
+async function writeerrors(errors_o: Object, filename: string): Promise<void> {
 	const error_headers = [
 	'oid', 'file', 'error'
 	];
-
 	const errors = [ error_headers ];
-
 	for( var oid in errors_o ) {
 		errors.push(error_headers.map((f) => { return errors_o[oid][f] }));
 	}
-
-	await writereport(outdir, errors, filename);
+	await writereport(errors, filename);
 }
 
-
-
-async function writereport(outdir: string, report: Object, filename: string): Promise<void> {
-	const csvfn = path.join(outdir, filename);
-	console.log(`Writing csv to ${csvfn}: ${JSON.stringify(report[0])}`);
+async function writereport(report: Object, fn: string): Promise<void> {
+	console.log(`Writing csv to ${fn}: ${JSON.stringify(report[0])}`);
 	const csvstr = stringify(report);
-	await fs.outputFile(csvfn, csvstr);
+	await fs.outputFile(fn, csvstr);
 	console.log('Done');
 }
 
 
-async function info(source: string) {
-	console.log('Source');
-	const rbSource = connect(source);
-	const r = await rbSource.info();
-	console.log(r);
-  const crosswalk_d = config.get('crosswalks');
-  if( crosswalk_d ) {
-  	console.log("Available crosswalks:");
-	  const d = await fs.readdir(crosswalk_d);
-  	d.map((f) => {
-  		var m = f.match(/^(.*?)\.json$/);
-  		if( m ) {
-  			console.log(m[1]);
-  		}
-  	});
-  } else {
-  	console.log("No crosswalks configured");
-  }
+async function main(args) {
+
+	const timestamp = moment().format('YYMMDDHHMMSS');
+	const name = args['crosswalk'] || 'all';
+	const outdir = path.join(args['outdir'], `report_${name}_${timestamp}`);
+
+	if ( !( args['crosswalk'] || args['index'] ) ) {
+		info(args['source']);
+	} else {
+		const [ records, errors ] = await index(args);
+		await writeerrors(errors, path.join(outdir, 'errors.csv'));
+
+		if( args['crosswalk'] ) {
+			// const [ updated_index, report ] = await migrate(args, records);
+			// await writeindex(updated_index, path.join(outdir, 'index.csv'));
+			// await writereport(report, path.join(outdir, 'report.csv'));
+			// showsummary(updated_summary);
+		} else {
+			await writeindex(records, path.join(outdir, 'index.csv'));
+			//showsummary(summary);
+		}
+	}
 }
+
+
+
+
+
+
 
 const log = getlogger();
 
@@ -498,7 +522,7 @@ parser.addArgument(
 parser.addArgument(
 	['-i', '--index'],
 	{
-		help: 'Index-only mode: just scans storage and writes index.csv',
+		help: 'Only write an index of the records to be crosswalked. If no --crosswalk is given, indexes all records.',
 		action: 'storeTrue',
 		defaultValue: false
 	}
@@ -513,10 +537,20 @@ parser.addArgument(
 	}
 );
 
-var args = parser.parseArgs();
+const args = parser.parseArgs();
 
-if ('crosswalk' in args && args['crosswalk']) {
-	migrate(args);
-} else {
-	info(args['source']);
-}
+main(args);
+
+// 			const summary = `Summary
+// ${rbSource.count_files} files read from ${rbSource.files}
+// ${rbSource.count_errors} parse errors
+// ${rbSource.count_success} records parsed matching ${crosswalk_file}
+// `;
+
+// 			console.log(summary);
+// 			log.info(summary);
+
+// 			await writeindex(outdir, rbSource.index, `index_${dateReport}.csv`);
+// 			await writeerrors(outdir, rbSource.errors, `errors_${dateReport}.csv`);
+// 			return;
+// 		}
