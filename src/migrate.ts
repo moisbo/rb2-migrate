@@ -147,7 +147,8 @@ async function index(options: Object): Promise<Object[][]> {
 			oids.splice(0, limit);
 	}
 
-	// hack - get all of the index objects out of rbSource
+	// hack - get all of the index objects out of rbSource so that
+	// the migrate function doesn't need to rely on it
 
 	const records = oids.map((oid) => { return rbSource.index[oid] } );
 
@@ -157,155 +158,152 @@ async function index(options: Object): Promise<Object[][]> {
 }
 
 
+// migrate - takes the list of records from index() plus the args
+// object, and returns a new copy of the index (with extra metadata and
+// status messages from the crosswalk) and the detailed report.
 
-async function migrate(options: Object): Promise<void> {
-// 	const source = options['source'];
-// 	const dest = options['dest'];
-// 	const crosswalk_file = options['crosswalk'];
-// 	const outdir = path.join(options['outdir'], `report_${crosswalk_file}_${dateReport}`);
-// 	const limit = options['number'];
-// 	const source_type = cw['source_type'];
+// Note that even after refactoring index() out of it, this function is
+// still a mess
 
+async function migrate(options: Object, outdir: string, records: Object[]): Promise<Object[][]> {
+	const source = options['source'];
+	const dest = options['dest'];
+	const crosswalk_file = options['crosswalk'];
 
-// 	const cw = await loadcrosswalk(`${crosswalk_file}.json`);
-// 	let cwPub, mdPub, mduPub, md2Pub = null;
-// 	let recordMeta = {};
-// 	let pubDestType;
-// 	if (options['publish']) {
-// 		cwPub = await loadcrosswalk(`${crosswalk_file}.publication.json`);
-// 	}
+	const cw = await loadcrosswalk(`${crosswalk_file}.json`);
+	const source_type = cw['source_type'];
+	const dest_type = cw['dest_type'];
+	let cwPub, mdPub, mduPub, md2Pub = null;
+	let recordMeta = {};
+	let pubDestType;
+	if (options['publish']) {
+		cwPub = await loadcrosswalk(`${crosswalk_file}.publication.json`);
+	}
 
+	var rbSource, rbDest;
 
+	try {
+		rbSource = connect(source);
+	} catch (e) {
+		log.error('Error connecting to source rb ' + source + ': ' + e);
+		throw new Error(e);
+	}
 
-// 	try {
-// 		rbDest = connect(dest);
-// 	} catch (e) {
-// 		log.error('Error connecting to dest rb ' + dest + ': ' + e);
-// 		throw new Error(e);
-// 	}
+	try {
+		rbDest = connect(dest);
+	} catch (e) {
+		log.error('Error connecting to dest rb ' + dest + ': ' + e);
+		throw new Error(e);
+	}
 
-// 	if (outdir) {
-// 		fs.ensureDirSync(path.join(outdir, 'originals'));
-// 		fs.ensureDirSync(path.join(outdir, 'new'));
-// 	}
+	if (outdir) {
+		fs.ensureDirSync(path.join(outdir, 'originals'));
+		fs.ensureDirSync(path.join(outdir, 'new'));
+	}
 
+	log.info(`Received ${records.length} oids`);
+	const n_old = records.length;
+	var n_crosswalked = 0;
+	var n_created = 0;
+	var n_pub = 0;
 
-// 		log.info(`Received ${oids.length} oids`);
-// 		const n_old = oids.length;
-// 		var n_crosswalked = 0;
-// 		var n_created = 0;
-// 		var n_pub = 0;
+	var report = [['oid', 'stage', 'ofield', 'nfield', 'status', 'value']];
 
+	const updated = [];
 
-// 		var report = [['oid', 'stage', 'ofield', 'nfield', 'status', 'value']];
+	try {
 
-// 		const n_errors = Object.keys(errors).length;
-// 		for( var oid in errors ) {
-// 			report.push([oid, 'list', '', '', 'error', errors[oid]]);
-// 		}
+		for( var i in records ) {
+			const record = records[i];
+			const oid = record['oid'];
+			const nrecord = _.clone(record);
+			console.log(JSON.stringify({record: record, nrecord:nrecord}));
+			log.info(`Processing oid ${oid}`);
+			let md = await rbSource.getRecord(oid);
+			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, oids.length));
+			if( !md ) {
+				log.error(`Couldn't get record for ${oid}`);
+				nrecord['status'] = 'load failed';
+				continue;
+			}
+			nrecord['title'] = md['dc:title'];
+			nrecord['description'] = md['dc:description'];
+			const logger = (stage, ofield, nfield, msg, value) => {
+				report.push([oid, stage, ofield, nfield, msg, value]);
+			};
+			const [mdu, md2] = crosswalk(cw, md, logger);
+			nrecord['status'] = 'crosswalked';
+			n_crosswalked += 1;
+			var noid = 'new_' + oid;
+			if (rbDest) {
+				if (validate(cw['required'], md2, logger)) {
+					try {
+						noid = await rbDest.createRecord(md2, dest_type);
+						if (noid) {
+							n_created += 1;
+							nrecord['status'] = 'migrated';
+							logger('create', '', '', '', noid);
+						} else {
+							logger('create', '', '', 'null noid', '');
+						}
+					} catch (e) {
+						logger('create', '', '', 'create failed', e);
+					}
+				} else {
+					console.log('\nInvalid or incomplete JSON for ' + oid + ', not migrating');
+				}
+				if (noid && noid !== 'new_' + oid) {
+					try {
+						const perms = await setpermissions(rbSource, rbDest, noid, oid, md2, cw['permissions']);
+						if (perms) {
+							if ('error' in perms) {
+								logger('permissions', '', '', 'permissions failed', perms['error']);
+							} else {
+								logger('permissions', '', '', 'set', perms);
+							}
+						} else {
+							logger('permissions', '', '', 'permissions failed', 'unknown error');
+						}
+					} catch (e) {
+						logger('setpermissions', '', '', 'setpermissions failed', e);
+					}
+					try {
+						recordMeta = await rbDest.getRecord(noid);
+					} catch (e) {
+						logger('getRecord', '', '', 'getRecord failed', e);
+					}
+					try {
+						const newRecordMeta = postwalk(cw['postTasks'], recordMeta, logger);
+						const enoid = await rbDest.updateRecordMetadata(noid, newRecordMeta);
+					} catch (e) {
+						logger('updateRecordMetadata', '', '', 'updateRecordMetadata postwalk failed', e);
+					}
+					if (cwPub) {
+						try {
+							let mdPub = await rbSource.getRecord(oid);
+							const resPub = crosswalk(cwPub, mdPub, logger);
+							mduPub = resPub[0];
+							md2Pub = resPub[1];
+							md2Pub[cwPub['dest_type']] = {
+								oid: noid,
+								title: recordMeta['title']
+							};
+						} catch (e) {
+							logger('getRecord', '', '', 'getRecord for publication failed', e);
+						}
+						n_pub += 1;
+						const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
+						nrecord['status'] = 'published';
+					}
+				}
+			}
 
+			updated.push(nrecord);
 
-// 	try {
-
-// 		for (var i in oids) {
-// 			log.info(`Processing oid ${oids[i]}`);
-// 			let md = await rbSource.getRecord(oids[i]);
-// 			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, oids.length));
-// 			if( !md ) {
-// 				log.error(`Couldn't get record for ${oids[i]}`);
-// 				rbSource.index[oids[i]]['status'] = 'load failed';
-// 				continue;
-// 			}
-// 			const oid = md[cw['idfield']] || oids[i]; //Some records do not contain the oid in its metadata!
-// 			rbSource.index[oid]['title'] = md['dc:title'];
-// 			rbSource.index[oid]['title'] = md['dc:description'];
-// 			const logger = (stage, ofield, nfield, msg, value) => {
-// 				report.push([oid, stage, ofield, nfield, msg, value]);
-// 			};
-// 			const [mdu, md2] = crosswalk(cw, md, logger);
-// 			rbSource.index[oid] = 'crosswalked';
-// 			n_crosswalked += 1;
-// 			var noid = 'new_' + oid;
-// 			if (rbDest) {
-// 				if (validate(cw['required'], md2, logger)) {
-// 					try {
-// 						noid = await rbDest.createRecord(md2, dest_type);
-// 						if (noid) {
-// 							n_created += 1;
-// 							rbSource.index[oid] = 'migrated';
-// 							logger('create', '', '', '', noid);
-// 						} else {
-// 							logger('create', '', '', 'null noid', '');
-// 						}
-// 					} catch (e) {
-// 						logger('create', '', '', 'create failed', e);
-// 					}
-// 				} else {
-// 					console.log('\nInvalid or incomplete JSON for ' + oid + ', not migrating');
-// 				}
-// 				if (noid && noid !== 'new_' + oid) {
-// 					try {
-// 						const perms = await setpermissions(rbSource, rbDest, noid, oid, md2, cw['permissions']);
-// 						if (perms) {
-// 							if ('error' in perms) {
-// 								logger('permissions', '', '', 'permissions failed', perms['error']);
-// 							} else {
-// 								logger('permissions', '', '', 'set', perms);
-// 							}
-// 						} else {
-// 							logger('permissions', '', '', 'permissions failed', 'unknown error');
-// 						}
-// 					} catch (e) {
-// 						logger('setpermissions', '', '', 'setpermissions failed', e);
-// 					}
-// 					try {
-// 						recordMeta = await rbDest.getRecord(noid);
-// 					} catch (e) {
-// 						logger('getRecord', '', '', 'getRecord failed', e);
-// 					}
-// 					try {
-// 						const newRecordMeta = postwalk(cw['postTasks'], recordMeta, logger);
-// 						const enoid = await rbDest.updateRecordMetadata(noid, newRecordMeta);
-// 					} catch (e) {
-// 						logger('updateRecordMetadata', '', '', 'updateRecordMetadata postwalk failed', e);
-// 					}
-// 					if (cwPub) {
-// 						try {
-// 							let mdPub = await rbSource.getRecord(oid);
-// 							const resPub = crosswalk(cwPub, mdPub, logger);
-// 							mduPub = resPub[0];
-// 							md2Pub = resPub[1];
-// 							md2Pub[cwPub['dest_type']] = {
-// 								oid: noid,
-// 								title: recordMeta['title']
-// 							};
-// 						} catch (e) {
-// 							logger('getRecord', '', '', 'getRecord for publication failed', e);
-// 						}
-// 						n_pub += 1;
-// 						const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
-// 					}
-// 				}
-// 			}
-
-// 			if (outdir) {
-// 				dumpjson(outdir, oid, noid, md, mdu, md2);
-// 			}
-// 		}
-
-// 		// appending timestamps to the reports so that we can have more than one 
-// 		// open in Excel at the same time :p
-
-// 		// index has one row for each record with metadata and crosswalk status.
-// 		// report goes into excruciating detail with a row for each field in each
-// 		// record.
-
-// 		// TODO: inject some more helpful things like the title and description
-
-// 		await writeindex(outdir, rbSource.index, `index_${dateReport}.csv`);
-// 		await writeerrors(outdir, rbSource.errors, `errors_${dateReport}.csv`);
-// 		await writereport(outdir, report, `report_${dateReport}.csv`);
-
+			if (outdir) {
+				dumpjson(outdir, oid, noid, md, mdu, md2);
+			}
+		}
 // 		const summary = `Summary
 // ${rbSource.count_files} files read from ${rbSource.files}
 // ${rbSource.count_errors} parse errors
@@ -318,12 +316,14 @@ async function migrate(options: Object): Promise<void> {
 // 		console.log(summary);
 // 		log.info(summary);
 
+		return [ updated, report ];
 
-// 	} catch (e) {
-// 		log.error('Migration error:' + e);
-// 		var stack = e.stack;
-// 		log.error(stack);
-// 	}
+	} catch (e) {
+		log.error('Migration error:' + e);
+		var stack = e.stack;
+		log.error(stack);
+		return [ [], [] ];
+	}
 
 }
 
@@ -451,10 +451,11 @@ async function main(args) {
 		const [ records, errors ] = await index(args);
 		await writeerrors(errors, path.join(outdir, 'errors.csv'));
 
+
 		if( args['crosswalk'] ) {
-			// const [ updated_index, report ] = await migrate(args, records);
-			// await writeindex(updated_index, path.join(outdir, 'index.csv'));
-			// await writereport(report, path.join(outdir, 'report.csv'));
+			const [ updated_records, report ] = await migrate(args, outdir, records);
+			await writeindex(updated_records, path.join(outdir, 'index.csv'));
+			await writereport(report, path.join(outdir, 'report.csv'));
 			// showsummary(updated_summary);
 		} else {
 			await writeindex(records, path.join(outdir, 'index.csv'));
