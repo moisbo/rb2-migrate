@@ -143,16 +143,19 @@ async function index(options: Object): Promise<Object[][]> {
 	} else {
 		oids = await rbSource.list({});
 	}
+	console.log(`Loaded index of ${oids.length} records`);
 	if (limit && parseInt(limit) > 0) {
-			oids.splice(0, limit);
+			oids.splice(limit);
+			console.log(`Limited to first ${oids.length} records`);
 	}
 
 	// hack - get all of the index objects out of rbSource so that
 	// the migrate function doesn't need to rely on it
 
 	const records = oids.map((oid) => { return rbSource.index[oid] } );
-
 	const errors = rbSource.errors;
+
+	console.log(`Parse errors for ${errors.length} items`);
 
 	return [ records, errors ];
 }
@@ -217,105 +220,101 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 			const record = records[i];
 			const oid = record['oid'];
 			const nrecord = _.clone(record);
-			console.log(JSON.stringify({record: record, nrecord:nrecord}));
 			log.info(`Processing oid ${oid}`);
 			let md = await rbSource.getRecord(oid);
-			//spinner.setSpinnerTitle(util.format("Crosswalking %d of %d", Number(i) + 1, oids.length));
 			if( !md ) {
 				log.error(`Couldn't get record for ${oid}`);
 				nrecord['status'] = 'load failed';
-				continue;
-			}
-			nrecord['title'] = md['dc:title'];
-			nrecord['description'] = md['dc:description'];
-			const logger = (stage, ofield, nfield, msg, value) => {
-				report.push([oid, stage, ofield, nfield, msg, value]);
-			};
-			const [mdu, md2] = crosswalk(cw, md, logger);
-			nrecord['status'] = 'crosswalked';
-			n_crosswalked += 1;
-			var noid = 'new_' + oid;
-			if (rbDest) {
-				if (validate(cw['required'], md2, logger)) {
-					try {
-						noid = await rbDest.createRecord(md2, dest_type);
-						if (noid) {
-							n_created += 1;
-							nrecord['status'] = 'migrated';
-							logger('create', '', '', '', noid);
-						} else {
-							logger('create', '', '', 'null noid', '');
-						}
-					} catch (e) {
-						logger('create', '', '', 'create failed', e);
-					}
-				} else {
-					console.log('\nInvalid or incomplete JSON for ' + oid + ', not migrating');
-				}
-				if (noid && noid !== 'new_' + oid) {
-					try {
-						const perms = await setpermissions(rbSource, rbDest, noid, oid, md2, cw['permissions']);
-						if (perms) {
-							if ('error' in perms) {
-								logger('permissions', '', '', 'permissions failed', perms['error']);
-							} else {
-								logger('permissions', '', '', 'set', perms);
-							}
-						} else {
-							logger('permissions', '', '', 'permissions failed', 'unknown error');
-						}
-					} catch (e) {
-						logger('setpermissions', '', '', 'setpermissions failed', e);
-					}
-					try {
-						recordMeta = await rbDest.getRecord(noid);
-					} catch (e) {
-						logger('getRecord', '', '', 'getRecord failed', e);
-					}
-					try {
-						const newRecordMeta = postwalk(cw['postTasks'], recordMeta, logger);
-						const enoid = await rbDest.updateRecordMetadata(noid, newRecordMeta);
-					} catch (e) {
-						logger('updateRecordMetadata', '', '', 'updateRecordMetadata postwalk failed', e);
-					}
-					if (cwPub) {
+			} else {
+				nrecord['title'] = md['dc:title'];
+				nrecord['description'] = md['dc:description'];
+				const logger = (stage, ofield, nfield, msg, value) => {
+					report.push([oid, stage, ofield, nfield, msg, value]);
+				};
+				const [mdu, md2] = crosswalk(cw, md, logger);
+				nrecord['status'] = 'crosswalked';
+				n_crosswalked += 1;
+				var noid = 'new_' + oid;
+				if (rbDest) {
+					if (validate(cw['required'], md2, logger)) {
 						try {
-							let mdPub = await rbSource.getRecord(oid);
-							const resPub = crosswalk(cwPub, mdPub, logger);
-							mduPub = resPub[0];
-							md2Pub = resPub[1];
-							md2Pub[cwPub['dest_type']] = {
-								oid: noid,
-								title: recordMeta['title']
-							};
+							noid = await rbDest.createRecord(md2, dest_type);
+							if (noid) {
+								n_created += 1;
+								nrecord['status'] = 'migrated';
+								logger('create', '', '', '', noid);
+							} else {
+								logger('create', '', '', 'null noid', '');
+							}
 						} catch (e) {
-							logger('getRecord', '', '', 'getRecord for publication failed', e);
+							logger('create', '', '', 'create failed', e);
 						}
-						n_pub += 1;
-						const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
-						nrecord['status'] = 'published';
+					} else {
+						console.log('\nInvalid or incomplete JSON for ' + oid + ', not migrating');
+						nrecord['status'] = 'invalid';
+					}
+					if (noid && noid !== 'new_' + oid) {
+						try {
+							const perms = await setpermissions(rbSource, rbDest, noid, oid, md2, cw['permissions']);
+							if (perms) {
+								if ('error' in perms) {
+									logger('permissions', '', '', 'permissions failed', perms['error']);
+								} else {
+									logger('permissions', '', '', 'set', perms);
+								}
+							} else {
+								logger('permissions', '', '', 'permissions failed', 'unknown error');
+							}
+						} catch (e) {
+							logger('setpermissions', '', '', 'setpermissions failed', e);
+						}
+						try {
+							recordMeta = await rbDest.getRecord(noid);
+						} catch (e) {
+							logger('getRecord', '', '', 'getRecord failed', e);
+						}
+						try {
+							const newRecordMeta = postwalk(cw['postTasks'], recordMeta, logger);
+							const enoid = await rbDest.updateRecordMetadata(noid, newRecordMeta);
+						} catch (e) {
+							logger('updateRecordMetadata', '', '', 'updateRecordMetadata postwalk failed', e);
+						}
+						if (cwPub) {
+							try {
+								let mdPub = await rbSource.getRecord(oid);
+								const resPub = crosswalk(cwPub, mdPub, logger);
+								mduPub = resPub[0];
+								md2Pub = resPub[1];
+								md2Pub[cwPub['dest_type']] = {
+									oid: noid,
+									title: recordMeta['title']
+								};
+							} catch (e) {
+								logger('getRecord', '', '', 'getRecord for publication failed', e);
+							}
+							n_pub += 1;
+							const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
+							nrecord['status'] = 'published';
+						}
 					}
 				}
+				if (outdir) {
+					dumpjson(outdir, oid, noid, md, mdu, md2);
+				}
 			}
-
 			updated.push(nrecord);
 
-			if (outdir) {
-				dumpjson(outdir, oid, noid, md, mdu, md2);
-			}
 		}
-// 		const summary = `Summary
-// ${rbSource.count_files} files read from ${rbSource.files}
-// ${rbSource.count_errors} parse errors
-// ${rbSource.count_success} records parsed matching ${crosswalk_file}
-// ${n_crosswalked} crosswalked 
-// ${n_created} created as ${dest_type} in ${dest}
-// ${n_pub} created as publications in ${dest}
-// `;
 
-// 		console.log(summary);
-// 		log.info(summary);
-
+ 		console.log(`${n_crosswalked} crosswalked`);
+ 		if( dest ) {
+ 			console.log(`${n_created} created as ${dest_type} in ${dest}`);
+ 			if( n_pub ) {
+				console.log(`${n_pub} created as publications in ${dest}`);
+			}
+		} else {
+			console.log("No --dest specified, no records created.");
+		}
 		return [ updated, report ];
 
 	} catch (e) {
@@ -441,7 +440,7 @@ async function writereport(report: Object, fn: string): Promise<void> {
 
 async function main(args) {
 
-	const timestamp = moment().format('YYMMDDHHMMSS');
+	const timestamp = Date.now().toString();
 	const name = args['crosswalk'] || 'all';
 	const outdir = path.join(args['outdir'], `report_${name}_${timestamp}`);
 
