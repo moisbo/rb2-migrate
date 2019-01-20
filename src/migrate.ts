@@ -229,6 +229,7 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 				continue;
 			}
 
+
 			updated[oid]['title'] = md['dc:title'];
 			updated[oid]['description'] = md['dc:description'];
 
@@ -236,6 +237,12 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 				report_lines.push([oid, stage, ofield, nfield, msg, value]);
 				updated[oid]['status'] = msg + ' ' + value; // status is always last thing
 			};
+
+			if( !record['owner'] ) {
+			 	report('load', '', '', 'no owner', '');
+			 	continue;
+			}
+
 
 			const [mdu, md2] = crosswalk(cw, md, report);
 			updated[oid]['status'] = 'crosswalked';
@@ -246,7 +253,7 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 				dumpjson(outdir, oid, noid, md, mdu, md2);
 			}
 
-			if (! validate(cw['required'], md2, report)) {
+			if (! validate(record['owner'], cw['required'], md2, report)) {
 				report('validation', '', '', 'invalid', '');
 				continue;
 			}
@@ -467,17 +474,14 @@ async function main(args) {
 		info(args['source']);
 	} else {
 		const [ records, errors ] = await index(args);
-		await writeerrors(errors, path.join(outdir, 'errors.csv'));
-
+		await writeerrors(errors, path.join(outdir, `errors_${timestamp}.csv`));
 
 		if( args['crosswalk'] ) {
 			const [ updated_records, report ] = await migrate(args, outdir, records);
-			await writeindex(updated_records, path.join(outdir, 'index.csv'));
-			await writereport(report, path.join(outdir, 'report.csv'));
-			// showsummary(updated_summary);
+			await writeindex(updated_records, path.join(outdir, `index_${timestamp}.csv`));
+			await writereport(report, path.join(outdir, `report_${timestamp}.csv`));
 		} else {
-			await writeindex(records, path.join(outdir, 'index.csv'));
-			//showsummary(summary);
+			await writeindex(records, path.join(outdir, `index_${timestamp}.csv`));
 		}
 	}
 }

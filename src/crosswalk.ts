@@ -314,7 +314,45 @@ function trfield(cf: string, old: string): string {
 	}
 }
 
-export function validate(required: string[], js: Object, logger: LogCallback): boolean {
+// check for a dc:identifier, ci and data manager (?)
+// and for truthy values for everything in required
+
+export function validate(owner: string, required: string[], js: Object, logger: LogCallback): boolean {
+
+	var ok = true;
+
+	var ci = js['contributor_ci'];
+
+	if( !ci || !ci['email'] ) {
+		ok = false;
+		logger('validate', '', 'ci', 'No CI', '');
+	} else {
+		if( ci['email'] !== owner ) {
+			logger('validate', '', 'ci', 'CI email does not match record owner', '');
+			// don't invalidate for this
+		}
+	}
+
+	var dm = js['contributor_data_manager'];
+
+	if( !dm || !dm['email'] ) {
+		logger('validate', '', 'dm', 'No data manager', '');
+	} 
+
+	required.map((f) => {
+		if( !js[f] ) {
+			logger('validate', '', f, 'Missing required field', '');
+			ok = false;
+		}
+	});
+
+	return ok;
+}
+
+
+// this is the first validate, and I really don't know what I was thinking
+
+export function validate_old(required: string[], js: Object, logger: LogCallback): boolean {
 	var r = _.clone(required);
 	var ok = true;
 	for (var key in js) {
