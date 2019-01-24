@@ -235,7 +235,7 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 
 			const report = (stage, ofield, nfield, msg, value) => {
 				report_lines.push([oid, stage, ofield, nfield, msg, value]);
-				updated[oid]['status'] = msg + ' ' + value; // status is always last thing
+				updated[oid]['status'] = msg + ': ' + value; // status is always last thing
 			};
 
 			if( !record['owner'] ) {
@@ -253,9 +253,15 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 				dumpjson(outdir, oid, noid, md, mdu, md2);
 			}
 
-			if (! validate(record['owner'], cw['required'], md2, report)) {
-				report('validation', '', '', 'invalid', '');
+			const errors = validate(record['owner'], cw['required'], md2, report);
+
+			if ( errors.length > 0 ) {
+				report('validate', '', '', 'invalid', errors.join('; '));
 				continue;
+			} else {
+				// this will be the last status if we're in dry-run/index mode, so
+				// it overwrites any warnings from validate() above
+				report('validate', '', '', 'valid', '');
 			}
 
 			if( !rbDest || args['index'] ) {

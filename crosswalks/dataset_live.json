@@ -67,7 +67,7 @@
     }
   ],
   "fields": {
-    "dc:creator.foaf:Person": {
+    "locrel:rth.foaf:Person": {
       "changeDestination": true,
       "destinations": [
         {

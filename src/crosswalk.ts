@@ -87,6 +87,7 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback): O
 				} else if (spec["type"] === "record") {
 					if ("handler" in spec) {
 						const h = get_handler(logger, spec);
+						// FIXME - also ask Moises what he's done here
 						if (h) {
 							if (spec['repeatable']) {
 								if (Array.isArray(src[srcfield])) {
@@ -217,6 +218,7 @@ function unflatten(cwjson: Object, original: Object, logger: LogCallback): Objec
 				var sfield = m[1];
 				const m2 = sfield.match(repeatrecord);
 				if (m2) {
+					// don't skip this - filter later
 					if (!spec['repeatable']) {
 						logger("records", field, "", "not repeatable", sfield);
 					} else {
@@ -249,6 +251,9 @@ function unflatten(cwjson: Object, original: Object, logger: LogCallback): Objec
 					}
 				} else {
 					// It doesn't look repeatable
+					// the logic here should be made to match that of un-repeatable fields
+					// ie accept what's in the document at this stage and complain when 
+					// crosswalking
 					if (spec['repeatable']) {
 						logger("records", field, "", "should be repeatable", sfield);
 					} else {
@@ -316,24 +321,27 @@ function trfield(cf: string, old: string): string {
 
 // check for a dc:identifier, ci and data manager (?)
 // and for truthy values for everything in required
+// this now returns an array of errors: if it's valid, returns an
+// empty array - because I want all of the invalid errors to 
+// appear in the index report
 
-export function validate(owner: string, required: string[], js: Object, logger: LogCallback): boolean {
+export function validate(owner: string, required: string[], js: Object, logger: LogCallback): string[] {
 
-	var ok = true;
+	const errors = [];
 
-	var ci = js['contributor_ci'];
+	const ci = js['contributor_ci'];
 
 	if( !ci || !ci['email'] ) {
-		ok = false;
-		logger('validate', '', 'ci', 'No CI', '');
+		logger('validate', '', 'contributor_ci', 'No CI', '');
+		errors.push('No CI');
 	} else {
 		if( ci['email'] !== owner ) {
-			logger('validate', '', 'ci', 'CI email does not match record owner', '');
+			logger('validate', '', 'ci', 'CI =/= record owner', '');
 			// don't invalidate for this
 		}
 	}
 
-	var dm = js['contributor_data_manager'];
+	const dm = js['contributor_data_manager'];
 
 	if( !dm || !dm['email'] ) {
 		logger('validate', '', 'dm', 'No data manager', '');
@@ -341,12 +349,12 @@ export function validate(owner: string, required: string[], js: Object, logger: 
 
 	required.map((f) => {
 		if( !js[f] ) {
-			logger('validate', '', f, 'Missing required field', '');
-			ok = false;
+			logger('validate', '', f, 'Required field is empty', '');
+			errors.push(`Missing value for ${f}`);
 		}
 	});
 
-	return ok;
+	return errors;
 }
 
 
