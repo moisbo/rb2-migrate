@@ -97,7 +97,7 @@
         "rdf:resource": "rdf:resource"
       }
     },
-    "locrel:rth.foaf:Person": {
+    "dc:creator.foaf:Person": {
       "name": "contributor_ci",
       "type": "record",
       "handler": "Person",

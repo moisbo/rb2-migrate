@@ -86,36 +86,52 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback): O
 					delete src[srcfield];
 				} else if (spec["type"] === "record") {
 					if ("handler" in spec) {
+						console.log("\n");
+						console.log(`Handler for field ${srcfield} => ${spec["name"]}`);
+						console.log(`Raw source: ${ JSON.stringify(src[srcfield]) }`);
 						const h = get_handler(logger, spec);
-						// FIXME - also ask Moises what he's done here
+						// tweaking this so that if it gets multiple items for a non-repeatable
+						// record, it takes the first, and if it gets a non-array value for 
+						// a repeatable, it wraps it in an array
 						if (h) {
 							if (spec['repeatable']) {
-								if (Array.isArray(src[srcfield])) {
-									if (spec["changeDestination"]) {
-										const repeatedHandler = repeat_handler(h, src[srcfield]);
-										repeatedHandler.forEach(rH => {
-											destfield = rH["destination"];
-											if (rH["repeatable"]) {
-												if (Array.isArray(dest[destfield])) {
-													dest[destfield] = dest[destfield].concat(rH);
-												} else {
-													dest[destfield] = new Array(rH);
-												}
+								var srcf = src[srcfield];
+								if( !Array.isArray(srcf) ) {
+									console.log("repeatable handler array-ified");
+									logger('crosswalk', srcfield, destfield, "warning: repeatable handler with non-array input", JSON.stringify(src[srcfield]));
+									srcf = [ srcf ];
+								}
+								if (spec["changeDestination"]) {
+									console.log("changeDestination repeatable handler " + JSON.stringify(src[srcfield]));
+									const repeatedHandler = repeat_handler(h, src[srcfield]);
+									repeatedHandler.forEach(rH => {
+										destfield = rH["destination"];
+										if (rH["repeatable"]) {
+											if (Array.isArray(dest[destfield])) {
+												dest[destfield] = dest[destfield].concat(rH);
 											} else {
-												dest[destfield] = rH;
+												dest[destfield] = new Array(rH);
 											}
-											delete rH["destination"];
-											delete rH["repeatable"];
-										});
-									} else {
-										dest[destfield] = repeat_handler(h, src[srcfield]);
-									}
+										} else {
+											dest[destfield] = rH;
+										}
+										delete rH["destination"];
+										delete rH["repeatable"];
+									});
 								} else {
-									logger('crosswalk', srcfield, destfield, "error: repeatable handler with non-array input", JSON.stringify(src[srcfield]));
-									dest[destfield] = [];
+									console.log("Repeatable handler " + JSON.stringify(src[srcfield]));
+									dest[destfield] = repeat_handler(h, src[srcfield]);
 								}
 							} else {
-								dest[destfield] = apply_handler(h, src[srcfield]);
+								console.log("Non-repeatable handler " + JSON.stringify(src[srcfield]));
+								if( Array.isArray(src[srcfield]) ) {
+									const first = src[srcfield][0]
+									console.log("Got array, picking first item");
+									logger('crosswalk', srcfield, destfield, "selected first of multiple records", JSON.stringify(first));
+									dest[destfield] = apply_handler(h, first);
+								} else {
+									dest[destfield] = apply_handler(h, src[srcfield]);
+								}
 							}
 						} else {
 							logger('crosswalk', srcfield, destfield, "error: handler", spec["handler"])
@@ -143,8 +159,7 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback): O
 		} else {
 			logger("omitted", srcfield, "", "ignored", src[srcfield]);
 		}
-	}
-
+  }
 	return [unflat, dest];
 }
 
@@ -219,34 +234,30 @@ function unflatten(cwjson: Object, original: Object, logger: LogCallback): Objec
 				const m2 = sfield.match(repeatrecord);
 				if (m2) {
 					// don't skip this - filter later
-					if (!spec['repeatable']) {
-						logger("records", field, "", "not repeatable", sfield);
+					const i = parseInt(m2[1]) - 1;
+					sfield = m2[2];
+					if (!('fields' in spec)) {
+						// no subfields
+						if (!(rfield in output)) {
+							output[rfield] = [];
+						}
+						logger("records", field, 'single', "copied", original[field]);
+						output[rfield][i] = original[field];
+						delete output[field];
 					} else {
-						const i = parseInt(m2[1]) - 1;
-						sfield = m2[2];
-						if (!('fields' in spec)) {
-							// no subfields
+						if (!(sfield in spec['fields'])) {
+							logger("records", field, "", "unknown subfield", sfield);
+						} else {
+							const mfield = spec['fields'][sfield];
 							if (!(rfield in output)) {
 								output[rfield] = [];
 							}
-							logger("records", field, 'single', "copied", original[field]);
-							output[rfield][i] = original[field];
-							delete output[field];
-						} else {
-							if (!(sfield in spec['fields'])) {
-								logger("records", field, "", "unknown subfield", sfield);
-							} else {
-								const mfield = spec['fields'][sfield];
-								if (!(rfield in output)) {
-									output[rfield] = [];
-								}
-								if (!(i in output[rfield])) {
-									output[rfield][i] = {};
-								}
-								logger("records", field, mfield, "copied", original[field])
-								output[rfield][i][mfield] = original[field];
-								delete output[field];
+							if (!(i in output[rfield])) {
+								output[rfield][i] = {};
 							}
+							logger("records", field, mfield, "copied", original[field])
+							output[rfield][i][mfield] = original[field];
+							delete output[field];
 						}
 					}
 				} else {
@@ -254,20 +265,19 @@ function unflatten(cwjson: Object, original: Object, logger: LogCallback): Objec
 					// the logic here should be made to match that of un-repeatable fields
 					// ie accept what's in the document at this stage and complain when 
 					// crosswalking
-					if (spec['repeatable']) {
-						logger("records", field, "", "should be repeatable", sfield);
+					// if (spec['repeatable']) {
+					// 	logger("records", field, "", "should be repeatable", sfield);
+					// } else {
+					if (!(sfield in spec['fields'])) {
+						logger("records", field, "", "unknown subfield", sfield);
 					} else {
-						if (!(sfield in spec['fields'])) {
-							logger("records", field, "", "unknown subfield", sfield);
-						} else {
-							const mfield = spec['fields'][sfield];
-							if (!(rfield in output)) {
-								output[rfield] = {};
-							}
-							logger("records", field, mfield, "copied", original[field])
-							output[rfield][mfield] = original[field];
-							delete output[field];
+						const mfield = spec['fields'][sfield];
+						if (!(rfield in output)) {
+							output[rfield] = {};
 						}
+						logger("records", field, mfield, "copied", original[field])
+						output[rfield][mfield] = original[field];
+						delete output[field];
 					}
 				}
 			}
@@ -376,7 +386,6 @@ export function validate_old(required: string[], js: Object, logger: LogCallback
 	}
 	return ok;
 }
-
 
 function valuemap(spec: Object, srcfield: string, destfield: string, srcval: string, logger: LogCallback): string {
 	if ("map" in spec) {

@@ -21,8 +21,12 @@ export class Person extends HandlerBase implements Handler {
 	crosswalk(o: Object): Object | undefined {
 		const givenName = o["givenname"] || o["given_name"] || '';
 		const familyName = o["familyname"] || o["family_name"] || '';
+		if( ! (givenName || familyName) ) {
+			return undefined;
+		}
+		const hrif = o["honorific"] || '';
 		const fullname = `${givenName.trim()} ${familyName.trim()}`;
-		let honorific = o["honorific"].trim();
+		let honorific = hrif.trim();
 		if (honorific) {
 			honorific = honorific + ' ';
 		}
