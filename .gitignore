@@ -1,5 +1,6 @@
 .DS_Store
 config/default.json
+config/production.json
 ~$*.xls*
 .idea
 node_modules
@@ -10,3 +11,4 @@ test/**/*.js.map
 logs/*.log
 report*/**
 test/diag
+test/storage
