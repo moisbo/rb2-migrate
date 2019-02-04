@@ -173,8 +173,6 @@
       "name": "_",
       "type": "valuemap",
       "map": {
-        "Personal equipment": "personal-equipment",
-        "Personal equipment (e.g. external drive, own laptop, etc)": "personal-equipment",
         "eResearch storage platforms (e.g. Omero, GitLab, etc)": "eresearch-platforms",
         "eResearch storage platforms": "eresearch-platforms",
         "Shared university network drive": "share-drive",
@@ -192,8 +190,6 @@
       "name": "_",
       "type": "valuemap",
       "map": {
-        "Personal equipment": "personal-equipment",
-        "Personal equipment (e.g. external drive, own laptop, etc)": "personal-equipment",
         "eResearch storage platforms (e.g. Omero, GitLab, etc)": "eresearch-platforms",
         "eResearch storage platforms": "eresearch-platforms",
         "Shared university network drive": "share-drive",
