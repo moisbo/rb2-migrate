@@ -189,7 +189,7 @@
     "vivo:Dataset.dc:source.dc:location.rdf:PlainLiteral": {
       "name": "_",
       "type": "valuemap",
-      "map": {,
+      "map": {
         "eResearch storage platforms (e.g. Omero, GitLab, etc)": "eresearch-platforms",
         "eResearch storage platforms": "eresearch-platforms",
         "Shared university network drive": "share-drive",
