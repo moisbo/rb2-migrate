@@ -13,7 +13,11 @@ This is a node.js package for migrating records from ReDBox 1.8+ to ReDBox 2.0 u
 
 ## Configuration
 
-The config file is config/default.json. Sections as follows:
+The config file is [config/default.json](). Sections as follows:
+
+You can also use config files in production by running  `export NODE_ENV=production` before the script
+
+And store production values in `config/production.json`
 
 ### servers
 
