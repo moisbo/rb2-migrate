@@ -10,8 +10,7 @@ JSONFILE=dataset_live.json
 
 ENDPOINT=http://localhost:1500/default/rdmp/api/records
 
-APIKEY="f093ce9e-627e-4e1b-9e54-37f561f1619b"
-
+APIKEY="ed74bc5a-59ab-4090-99c1-a51e23f1c5cc"
 PTYPE=dataRecord
 MIMETYPE="Content-Type: application/json"
 

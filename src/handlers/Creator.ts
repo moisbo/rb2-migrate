@@ -3,6 +3,9 @@ import {isEmailValid, decodeEmail} from "../utils/helpers";
 
 const util = require('util');
 
+// NOTE: this is basically the same as Person.ts so I'm switching
+// the publication crosswalk over to it.
+
 // This expects the incoming person record to have the following:
 
 // dc:identifier

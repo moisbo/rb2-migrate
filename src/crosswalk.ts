@@ -48,6 +48,8 @@ function apply_handler(h: Handlers.Handler, original: Object): Object {
 // results
 
 function repeat_handler(h: Handlers.Handler, originals: Object[]): Object[] {
+	console.log("repeat_handler: " + String(h));
+	console.log("originals: " + JSON.stringify(originals));
 	return originals.map((o) => h.crosswalk(o)).filter((o) => o)
 }
 
@@ -93,12 +95,13 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback): O
 						const h = get_handler(logger, spec);
 
 						if (h) {
+							console.log("Handler: " + spec['handler'] + ": " + srcfield);
 							if (spec['repeatable']) {
 								var srcf = src[srcfield];
 								if( !Array.isArray(srcf) ) {
    								//console.log("repeatable handler array-ified");
 									logger('crosswalk', srcfield, destfield, "warning: repeatable handler with non-array input", JSON.stringify(src[srcfield]));
-									srcf = [ srcf ];
+									src[srcfield] = [ srcf ];
 								}
 								if (spec["changeDestination"]) {
 									//console.log("changeDestination repeatable handler " + JSON.stringify(src[srcfield]));

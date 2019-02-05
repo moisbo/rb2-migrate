@@ -11,4 +11,4 @@ if [[ -z $CROSSWALK ]]; then
 	exit 1
 fi
 
-node ./src/migrate.js --outdir $OUTDIR --source $SOURCE --dest $DEST --crosswalk $CROSSWALK  
+node ./src/migrate.js --outdir $OUTDIR --source $SOURCE --dest $DEST --crosswalk $CROSSWALK --publish --number 6

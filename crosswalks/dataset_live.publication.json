@@ -152,7 +152,7 @@
     "locrel:clb.foaf:Person": {
       "name": "creators",
       "type": "record",
-      "handler": "Creator",
+      "handler": "Person",
       "repeatable": 1,
       "destIsArray": true,
       "role": "",
@@ -167,7 +167,7 @@
     "swrc:supervisor.foaf:Person": {
       "name": "creators",
       "type": "record",
-      "handler": "Creator",
+      "handler": "Person",
       "role": "",
       "repeatable": 1,
       "destIsArray": true,
@@ -182,7 +182,7 @@
     "locrel:prc.foaf:Person": {
       "name": "creators",
       "type": "record",
-      "handler": "Creator",
+      "handler": "Person",
       "role": "",
       "repeatable": 1,
       "destIsArray": true,

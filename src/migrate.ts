@@ -180,7 +180,14 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 	let recordMeta = {};
 	let pubDestType;
 	if (options['publish']) {
-		cwPub = await loadcrosswalk(`${crosswalk_file}.publication.json`);
+		const cwPfile = `${crosswalk_file}.publication.json`;
+		cwPub = await loadcrosswalk(cwPfile);
+		if( cwPub ) {
+			log.info(`Loaded publications crosswalk ${cwPfile}`);
+		} else {
+			log.error(`Loading publications crosswalk ${cwPfile} failed`);
+			return [ [], [] ]
+		}
 	}
 
 	var rbSource, rbDest;
@@ -317,21 +324,41 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 			if (!cwPub) {
 				continue;
 			}
+
+			const report_pub = (stage, ofield, nfield, msg, value) => {
+				report_lines.push([oid + "_pub", stage, ofield, nfield, msg, value]);
+				// not doing anything for status
+			};
 			
 			try {
 				let mdPub = await rbSource.getRecord(oid);
-				const resPub = crosswalk(cwPub, mdPub, report);
+				console.log(`Got record ${oid} for publication crosswalk`);
+				const resPub = crosswalk(cwPub, mdPub, report_pub);
 				mduPub = resPub[0];
 				md2Pub = resPub[1];
 				md2Pub[cwPub['dest_type']] = {
 					oid: noid,
 					title: recordMeta['title']
 				};
+
+				[ 'ci', 'data_manager' ].forEach((type) => {
+					const f = 'contributor_' + type;
+					md2Pub[f] = _.clone(md2[f]);
+					console.log(`${type} from data record ${ JSON.stringify(mdPub[f])}`);
+					if( ! md2Pub[f] ) {
+						report_pub("publication", f, f, "No value", "");
+					} else {
+						report_pub("publication", f, f, "copied", JSON.stringify(md2Pub[f]));
+					}
+				});
+				dumpjson(outdir, 'new', oid + '_publication', md2Pub);
 				n_pub += 1;
 				const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
 				report('published', '', '', 'publication created', '');
 			} catch (e) {
-				report('published', '', '', 'publish failed', e);
+				log.error("Publish error: " + e);
+				console.trace("Publish error: " + e);
+				report('published', '', '', 'publish failed', e.message);
 			}
 		}
 
@@ -389,16 +416,15 @@ async function setpermissions(rbSource: Redbox, rbDest: Redbox, noid: string, oi
 		}
 		['view, edit '].map((p) => perms[p] = _.union(perms[p], nperms[p]));
 	}
-	console.log("Would set permissions if it were turned on:");
+	console.log("Permissions ( skipping )");
 	console.log(JSON.stringify(perms));
-	return { 'dummy': true };
-// 	try {
+ 	try {
 // 		const view = await rbDest.grantPermission(noid, 'view', perms['view']);
 // 		const edit = await rbDest.grantPermission(noid, 'edit', perms['edit']);
-// 	} catch (e) {
-// 		throw e;
-// //		return {'error granting permissions': e};
-// 	}
+ 		return { 'success': true };
+ 	} catch (e) {
+ 		throw e;
+ 	}
 
 }
 
@@ -424,28 +450,6 @@ async function usermap(rbSource: Redbox, oid: string, md2: Object, pcw: Object):
 	}
 	return users;
 }
-
-
-// async function dumpjson_old(outdir: string, oid: string, noid: string, md: Object, mdu: Object, md2: Object): Promise<void> {
-// 	await fs.writeJson(
-// 		path.join(outdir, 'originals', util.format('%s.json', oid)),
-// 		md,
-// 		{spaces: 4}
-// 	);
-// 	await fs.writeJson(
-// 		path.join(outdir, 'originals', util.format('%s_unflat.json', oid)),
-// 		mdu,
-// 		{spaces: 4}
-// 	);
-// 	if (!noid) {
-// 		noid = '_' + oid;
-// 	}
-// 	await fs.writeJson(
-// 		path.join(outdir, 'new', util.format('%s.json', noid)),
-// 		md2,
-// 		{spaces: 4}
-// 	);
-// }
 
 
 async function dumpjson(outdir: string, subdir: string, file: string, md: Object): Promise<void> {
