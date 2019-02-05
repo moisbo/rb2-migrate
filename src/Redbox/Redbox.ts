@@ -119,22 +119,21 @@ export abstract class BaseRedbox {
     if( url[0] !== '/' ) {
       url = '/' + url;
     }
+    console.log("POST " + url);
+    console.log("config " + JSON.stringify(config));
+    console.log("title " + payload['title']);
+    console.log("CI " + JSON.stringify(payload['contributor_ci']));
+
     try {
       if( params ) {
         config["params"] = params;
       }
-      console.log("POST " + url);
-      console.log("config " + JSON.stringify(config));
-      console.log("payload " + JSON.stringify(payload));
       let response = await this.ai.post(url, payload, config);
       if( response.status >= 200 && response.status < 300 ) {
         return response.data;
       }
     } catch ( e ) {
-      console.trace("\n\nPost error " + String(e));
-      console.log("URL: " + url);
-      console.log("payload: " + JSON.stringify(payload));
-      console.log("config:" + JSON.stringify(config));
+      console.log("\n\nPost error " + String(e));
       return undefined;
     }
   }

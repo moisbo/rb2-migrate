@@ -40,34 +40,8 @@
     "oid",
     "objMeta"
   ],
-  "postTasks": [
-    {
-      "name": "complement",
-      "fields": [
-        {
-          "name": "contributor_data_manager",
-          "updateTo": "contributor_ci"
-        }
-      ]
-    },
-    {
-      "name": "removeIfRepeated",
-      "fields": [
-        {
-          "name": "contributor_ci",
-          "removeFrom": "contributors",
-          "compare": "dc:identifier"
-        },
-        {
-          "name": "contributor_data_manager",
-          "removeFrom": "contributors",
-          "compare": "dc:identifier"
-        }
-      ]
-    }
-  ],
   "fields": {
-    "locrel:rth.foaf:Person": {
+    "dc:creator.foaf:Person": {
       "changeDestination": true,
       "destinations": [
         {

@@ -250,7 +250,9 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 			var noid = 'new_' + oid;
 
 			if (outdir) {
-				dumpjson(outdir, oid, noid, md, mdu, md2);
+				dumpjson(outdir, 'originals', oid, md);
+				dumpjson(outdir, 'originals', oid + '_unflat', mdu);
+				dumpjson(outdir, 'new', oid, md2);
 			}
 
 			const errors = validate(record['owner'], cw['required'], md2, report);
@@ -295,18 +297,21 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 				report('permissions', '', '', 'failed', e);
 			}
 
-			try {
-				recordMeta = await rbDest.getRecord(noid);
-			} catch (e) {
-				report('postwalk', '', '', 'getRecord failed', e);
-				continue;
-			}
+			if( cw['postTasks'] ) {
+				try {
+					recordMeta = await rbDest.getRecord(noid);
+				} catch (e) {
+					report('postwalk', '', '', 'getRecord failed', e);
+					continue;
+				}
 
-			try {
-				const newRecordMeta = postwalk(cw['postTasks'], recordMeta, report);
-				const enoid = await rbDest.updateRecordMetadata(noid, newRecordMeta);
-			} catch (e) {
-				report('updateRecordMetadata', '', '', 'postwalk failed', e);
+				try {
+					const newRecordMeta = postwalk(cw['postTasks'], recordMeta, report);
+					dumpjson(outdir, 'new', oid + '_postwalk', newRecordMeta);
+					const enoid = await rbDest.updateRecordMetadata(noid, newRecordMeta);
+				} catch (e) {
+					report('postwalk', '', '', 'postwalk failed', e);
+				}
 			}
 
 			if (!cwPub) {
@@ -384,12 +389,17 @@ async function setpermissions(rbSource: Redbox, rbDest: Redbox, noid: string, oi
 		}
 		['view, edit '].map((p) => perms[p] = _.union(perms[p], nperms[p]));
 	}
-	try {
-		const view = await rbDest.grantPermission(noid, 'view', perms['view']);
-		const edit = await rbDest.grantPermission(noid, 'edit', perms['edit']);
-	} catch (e) {
-		return {'error granting permissions': e};
-	}
+	console.log("Would set permissions if it were turned on:");
+	console.log(JSON.stringify(perms));
+	return { 'dummy': true };
+// 	try {
+// 		const view = await rbDest.grantPermission(noid, 'view', perms['view']);
+// 		const edit = await rbDest.grantPermission(noid, 'edit', perms['edit']);
+// 	} catch (e) {
+// 		throw e;
+// //		return {'error granting permissions': e};
+// 	}
+
 }
 
 
@@ -416,26 +426,37 @@ async function usermap(rbSource: Redbox, oid: string, md2: Object, pcw: Object):
 }
 
 
-async function dumpjson(outdir: string, oid: string, noid: string, md: Object, mdu: Object, md2: Object): Promise<void> {
+// async function dumpjson_old(outdir: string, oid: string, noid: string, md: Object, mdu: Object, md2: Object): Promise<void> {
+// 	await fs.writeJson(
+// 		path.join(outdir, 'originals', util.format('%s.json', oid)),
+// 		md,
+// 		{spaces: 4}
+// 	);
+// 	await fs.writeJson(
+// 		path.join(outdir, 'originals', util.format('%s_unflat.json', oid)),
+// 		mdu,
+// 		{spaces: 4}
+// 	);
+// 	if (!noid) {
+// 		noid = '_' + oid;
+// 	}
+// 	await fs.writeJson(
+// 		path.join(outdir, 'new', util.format('%s.json', noid)),
+// 		md2,
+// 		{spaces: 4}
+// 	);
+// }
+
+
+async function dumpjson(outdir: string, subdir: string, file: string, md: Object): Promise<void> {
 	await fs.writeJson(
-		path.join(outdir, 'originals', util.format('%s.json', oid)),
+		path.join(outdir, subdir, util.format('%s.json', file)),
 		md,
 		{spaces: 4}
 	);
-	await fs.writeJson(
-		path.join(outdir, 'originals', util.format('%s_unflat.json', oid)),
-		mdu,
-		{spaces: 4}
-	);
-	if (!noid) {
-		noid = '_' + oid;
-	}
-	await fs.writeJson(
-		path.join(outdir, 'new', util.format('%s.json', noid)),
-		md2,
-		{spaces: 4}
-	);
+
 }
+
 
 
 async function writeindex(index_o: Object, filename: string): Promise<void> {

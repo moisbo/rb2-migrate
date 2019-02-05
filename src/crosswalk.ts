@@ -86,23 +86,22 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback): O
 					delete src[srcfield];
 				} else if (spec["type"] === "record") {
 					if ("handler" in spec) {
-						console.log("\n");
-						console.log(`Handler for field ${srcfield} => ${spec["name"]}`);
-						console.log(`Raw source: ${ JSON.stringify(src[srcfield]) }`);
+						// console.log("\n");
+						// console.log(`Handler for field ${srcfield} => ${spec["name"]}`);
+						// console.log(`Raw source: ${ JSON.stringify(src[srcfield]) }`);
+
 						const h = get_handler(logger, spec);
-						// tweaking this so that if it gets multiple items for a non-repeatable
-						// record, it takes the first, and if it gets a non-array value for 
-						// a repeatable, it wraps it in an array
+
 						if (h) {
 							if (spec['repeatable']) {
 								var srcf = src[srcfield];
 								if( !Array.isArray(srcf) ) {
-									console.log("repeatable handler array-ified");
+   								//console.log("repeatable handler array-ified");
 									logger('crosswalk', srcfield, destfield, "warning: repeatable handler with non-array input", JSON.stringify(src[srcfield]));
 									srcf = [ srcf ];
 								}
 								if (spec["changeDestination"]) {
-									console.log("changeDestination repeatable handler " + JSON.stringify(src[srcfield]));
+									//console.log("changeDestination repeatable handler " + JSON.stringify(src[srcfield]));
 									const repeatedHandler = repeat_handler(h, src[srcfield]);
 									repeatedHandler.forEach(rH => {
 										destfield = rH["destination"];
@@ -119,14 +118,14 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback): O
 										delete rH["repeatable"];
 									});
 								} else {
-									console.log("Repeatable handler " + JSON.stringify(src[srcfield]));
+									//console.log("Repeatable handler " + JSON.stringify(src[srcfield]));
 									dest[destfield] = repeat_handler(h, src[srcfield]);
 								}
 							} else {
-								console.log("Non-repeatable handler " + JSON.stringify(src[srcfield]));
+								//console.log("Non-repeatable handler " + JSON.stringify(src[srcfield]));
 								if( Array.isArray(src[srcfield]) ) {
 									const first = src[srcfield][0]
-									console.log("Got array, picking first item");
+									//console.log("Got array, picking first item");
 									logger('crosswalk', srcfield, destfield, "selected first of multiple records", JSON.stringify(first));
 									dest[destfield] = apply_handler(h, first);
 								} else {
@@ -341,21 +340,28 @@ export function validate(owner: string, required: string[], js: Object, logger: 
 
 	const ci = js['contributor_ci'];
 
-	if( !ci || !ci['email'] ) {
+	if( !ci ) {
 		logger('validate', '', 'contributor_ci', 'No CI', '');
 		errors.push('No CI');
 	} else {
-		if( ci['email'] !== owner ) {
+		if( !ci['email'] ) {
+			
+			logger('validate', '', 'contributor_ci', 'CI without email: using owner', '');
+			ci['email'] = owner;
+		} else if( ci['email'] !== owner ) {
 			logger('validate', '', 'ci', 'CI =/= record owner', '');
-			// don't invalidate for this
 		}
 	}
 
 	const dm = js['contributor_data_manager'];
 
-	if( !dm || !dm['email'] ) {
-		logger('validate', '', 'dm', 'No data manager', '');
-	} 
+	if( !dm ) {
+		logger('validate', '', 'contributor_data_manager', 'No data manager', '');
+	} else {
+		if( !dm['email'] ) {
+			logger('validate', '', 'contributor_data_manager', 'DM without email', '');
+		}
+	}
 
 	required.map((f) => {
 		if( !js[f] ) {
