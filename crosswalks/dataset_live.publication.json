@@ -232,11 +232,15 @@
     "dc:coverage.vivo:GeographicLocation": {
       "name": "geolocations",
       "type": "record",
-      "handler": "GeoLocation",
       "repeatable": 1,
+      "fields": {
+        "dc:identifier": "identifier",
+        "rdf:PlainLiteral": "basic_name",
+        "geo:lat": "lat",
+        "geo:long": "long"
+      }
     },
     "redbox:embargo.redbox:isEmbargoed": "embargoByDate",
     "redbox:embargo.dc:date": "embargoUntil"
-    }
   }
 }
