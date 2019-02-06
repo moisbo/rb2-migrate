@@ -336,15 +336,19 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 				const resPub = crosswalk(cwPub, mdPub, report_pub);
 				mduPub = resPub[0];
 				md2Pub = resPub[1];
-				md2Pub[cwPub['dest_type']] = {
+				// dest_type in the next line is the primary type this is a publication for,
+				// ie its parent, a dataRecord
+				md2Pub[dest_type] = {
 					oid: noid,
-					title: recordMeta['title']
+					title: md2['title']
 				};
+
+				console.log(`parent link to ${dest_type}: ${JSON.stringify(md2Pub[dest_type])}`);
 
 				[ 'ci', 'data_manager' ].forEach((type) => {
 					const f = 'contributor_' + type;
 					md2Pub[f] = _.clone(md2[f]);
-					console.log(`${type} from data record ${ JSON.stringify(mdPub[f])}`);
+					console.log(`${type} from data record ${ JSON.stringify(md2Pub[f])}`);
 					if( ! md2Pub[f] ) {
 						report_pub("publication", f, f, "No value", "");
 					} else {

@@ -40,7 +40,7 @@
     "Test2_0": {
       "version": "Redbox2",
       "baseURL": "http://localhost:1500",
-      "apiKey": "dd2be70d-3628-4ace-b724-7ad588960bad",
+      "apiKey": "93fac998-582c-4a3a-a12b-b63230b329ed",
       "packageTypes": [
 	"rdmp", "dataRecord", "workspace"
       ],

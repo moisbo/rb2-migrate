@@ -2,7 +2,7 @@
   "idfield": "oid",
   "source_type": "dataset",
   "workflow_step": "live",
-  "dest_type": "dataRecord",
+  "dest_type": "dataPublication",
   "workflow": {
     "stageold1": "stagenew1",
     "stageold2": "stagenew2"
