@@ -93,7 +93,6 @@ export function crosswalk(cwjson: Object, original: any, logger: LogCallback): O
 						const h = get_handler(logger, spec);
 
 						if (h) {
-							console.log("Handler: " + spec['handler'] + ": " + srcfield);
 							if (spec['repeatable']) {
 								var srcf = src[srcfield];
 								if( !Array.isArray(srcf) ) {
