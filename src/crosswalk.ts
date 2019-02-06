@@ -48,8 +48,6 @@ function apply_handler(h: Handlers.Handler, original: Object): Object {
 // results
 
 function repeat_handler(h: Handlers.Handler, originals: Object[]): Object[] {
-	console.log("repeat_handler: " + String(h));
-	console.log("originals: " + JSON.stringify(originals));
 	return originals.map((o) => h.crosswalk(o)).filter((o) => o)
 }
 

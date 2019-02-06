@@ -414,13 +414,13 @@ async function setpermissions(rbSource: Redbox, rbDest: Redbox, noid: string, oi
 				}
 			}
 		}
-		['view, edit '].map((p) => perms[p] = _.union(perms[p], nperms[p]));
+		['view',' edit'].map((p) => perms[p] = _.union(perms[p], nperms[p]));
 	}
-	console.log("Permissions ( skipping )");
+	console.log("Permissions:");
 	console.log(JSON.stringify(perms));
  	try {
-// 		const view = await rbDest.grantPermission(noid, 'view', perms['view']);
-// 		const edit = await rbDest.grantPermission(noid, 'edit', perms['edit']);
+ 		const view = await rbDest.grantPermission(noid, 'view', perms['view']);
+ 		const edit = await rbDest.grantPermission(noid, 'edit', perms['edit']);
  		return { 'success': true };
  	} catch (e) {
  		throw e;
