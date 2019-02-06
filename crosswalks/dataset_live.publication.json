@@ -94,6 +94,16 @@
         "rdf:PlainLiteral": ""
       }
     },
+    "dc:coverage.vivo:GeographicLocation": {
+      "name": "geolocations",
+      "type": "record",
+      "handler": "GeoLocation",
+      "repeatable": 1,
+      "fields": {
+        "rdf:PlainLiteral": "basic_name"
+      }
+    },
+
     "bibo:DataLocation": {
       "name": "dataLocations",
       "type": "record",

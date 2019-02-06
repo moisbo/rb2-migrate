@@ -37,9 +37,20 @@
         }
       }
     },
-    "Test2_0": {
+    "Test2_0local": {
       "version": "Redbox2",
       "baseURL": "http://localhost:1500",
+      "apiKey": "93fac998-582c-4a3a-a12b-b63230b329ed",
+      "packageTypes": [
+  "rdmp", "dataRecord", "workspace"
+      ],
+      "branding": "default",
+      "portal": "rdmp"
+    }
+  },
+    "Prod2_0": {
+      "version": "Redbox2",
+      "baseURL": "https://stash-new.research.uts.edu.au/",
       "apiKey": "93fac998-582c-4a3a-a12b-b63230b329ed",
       "packageTypes": [
 	"rdmp", "dataRecord", "workspace"
