@@ -334,12 +334,13 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 
 			const report_pub = (stage, ofield, nfield, msg, value) => {
 				report_lines.push([oid + "_pub", stage, ofield, nfield, msg, value]);
-				// not doing anything for status
+				// FIXME status should get updated too
 			};
 			
 			try {
 				let mdPub = await rbSource.getRecord(oid);
 				console.log(`Got record ${oid} for publication crosswalk`);
+				report("publication", '', '', 'Crosswalking', '');
 				const resPub = crosswalk(cwPub, mdPub, report_pub);
 				mduPub = resPub[0];
 				md2Pub = resPub[1];
@@ -363,6 +364,7 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 					}
 				});
 				dumpjson(outdir, 'new', oid + '_publication', md2Pub);
+				dumpjson(outdir, 'originals', oid + '_pub_unflat', mduPub);
 				n_pub += 1;
 				const pubOid = await rbDest.createRecord(md2Pub, cwPub['dest_type']);
 				report('published', '', '', 'publication created', '');
@@ -515,8 +517,15 @@ async function main(args) {
 	if ( !( args['crosswalk'] || args['index'] ) ) {
 		info(args['source']);
 	} else {
-		const [ records, errors ] = await index(args);
+		var [ records, errors ] = await index(args);
 		await writeerrors(errors, path.join(outdir, `errors_${timestamp}.csv`));
+
+		if( args['record'] ) {
+			records = records.filter((r) => { return r['oid'] === args['record'] });
+			if( records.length !== 1 ) {
+				log.error(`Record ${args['record']} not found`);
+			}
+		}
 
 		if( args['crosswalk'] ) {
 			const [ updated_records, report ] = await migrate(args, outdir, records);
@@ -595,6 +604,15 @@ parser.addArgument(
 		defaultValue: false
 	}
 );
+
+parser.addArgument(
+	['-r', '--record'],
+	{
+		help: 'Specify a single record to migrate, by oid on the source.',
+		defaultValue: null
+	}
+);
+
 
 parser.addArgument(
 	['-p', '--publish'],
