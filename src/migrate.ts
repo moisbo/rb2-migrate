@@ -224,6 +224,13 @@ async function migrate(options: Object, outdir: string, records: Object[]): Prom
 	try {
 
 		for( var i in records ) {
+
+			if(args['wait']) {
+				const waitPeriod = args['wait'];
+				const waited = await sleep(waitPeriod);
+				console.log('continue...');
+			}
+
 			const record = records[i];
 			const oid = record['oid'];
 			updated[oid] = _.clone(record);
@@ -522,7 +529,10 @@ async function main(args) {
 }
 
 
-
+const sleep = ms => new Promise((r, j) => {
+	console.log('Waiting for ' + ms  + ' seconds');
+	setTimeout(r, ms * 1000 );
+});
 
 
 
@@ -592,6 +602,14 @@ parser.addArgument(
 		help: 'Copies records into publication draft',
 		action: 'storeTrue',
 		defaultValue: false
+	}
+);
+
+parser.addArgument(
+	['-w', '--wait'],
+	{
+		help: 'Waits for X amounts of seconds for each crosswalk',
+		defaultValue: undefined
 	}
 );
 

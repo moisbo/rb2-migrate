@@ -2,47 +2,75 @@
   "servers": {
     "Test1_9": {
       "version": "Redbox1",
-      "baseURL": "https://test-redbox.research.uts.edu.au/redbox/api/v1",
-      "apiKey": "29us0fw984yrw9",
-      "solrURL": "https://test-redbox.research.uts.edu.au/redbox-solr/fascinator",
-      "packageTypes": [ "dmpt", "dataset", "self-submission" ],
+      "baseURL": "http://localhost:8000/redbox/api/v1",
+      "apiKey": "c8e844fc-8550-497f-b970-7900ec8741ca",
+      "solrURL": "http://localhost:8000/solr/fascinator",
+      "packageTypes": [
+        "dmpt",
+        "dataset",
+        "self-submission"
+      ],
       "crosswalks": {
         "dmpt": "rdmp",
         "self-submission": {
-          "draft": [ "dataRecord" ]
+          "draft": [
+            "dataRecord"
+          ]
         },
         "dataset": {
-            "investigation":   [ "dataRecord" ],
-            "live":            [ "dataRecord", "dataPublication" ],
-            "metadata-review": [ "dataRecord" ]
+          "investigation": [
+            "dataRecord"
+          ],
+          "live": [
+            "dataRecord",
+            "dataPublication"
+          ],
+          "metadata-review": [
+            "dataRecord"
+          ]
         }
       }
     },
     "Test1_9_files": {
       "version": "Redbox1Files",
-      "baseURL": "https://test-redbox.research.uts.edu.au/redbox/api/v1",
-      "apiKey": "29us0fw984yrw9",
-      "solrURL": "https://test-redbox.research.uts.edu.au/redbox-solr/fascinator",
+      "baseURL": "http://localhost:8000/redbox/api/v1",
+      "apiKey": "c8e844fc-8550-497f-b970-7900ec8741ca",
+      "solrURL": "http://localhost:8000/solr/fascinator",
       "files": "./test/storage",
-      "packageTypes": [ "dmpt", "dataset", "self-submission" ],
+      "packageTypes": [
+        "dmpt",
+        "dataset",
+        "self-submission"
+      ],
       "crosswalks": {
         "dmpt": "rdmp",
         "self-submission": {
-          "draft": [ "dataRecord" ]
+          "draft": [
+            "dataRecord"
+          ]
         },
         "dataset": {
-            "investigation":   [ "dataRecord" ],
-            "live":            [ "dataRecord", "dataPublication" ],
-            "metadata-review": [ "dataRecord" ]
+          "investigation": [
+            "dataRecord"
+          ],
+          "live": [
+            "dataRecord",
+            "dataPublication"
+          ],
+          "metadata-review": [
+            "dataRecord"
+          ]
         }
       }
     },
     "Test2_0": {
       "version": "Redbox2",
-      "baseURL": "http://localhost:1500",
-      "apiKey": "93fac998-582c-4a3a-a12b-b63230b329ed",
+      "baseURL": "https://XXX-XXX-XXX",
+      "apiKey": "XXX-XXX-XXX",
       "packageTypes": [
-	"rdmp", "dataRecord", "workspace"
+        "rdmp",
+        "dataRecord",
+        "workspace"
       ],
       "branding": "default",
       "portal": "rdmp"
